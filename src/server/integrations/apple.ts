@@ -153,7 +153,16 @@ export class AppleProvider implements CoverageProvider {
           `${solverLabels[execution.solver]} zwróciło rozwiązanie po ${(solverMs / 1000).toFixed(1)} s.`,
         );
         signal.throwIfAborted();
-        await page.locator('#captcha-input').fill(solution.text);
+        const captchaInput = page.locator('#captcha-input');
+        await captchaInput.fill('');
+        await captchaInput.pressSequentially(solution.text, { delay: 40 });
+        await captchaInput.press('Tab');
+        const captchaMatches = (await captchaInput.inputValue()) === solution.text;
+        await log(
+          'captcha_filled',
+          `Wpisano rozwiązanie CAPTCHA; pole zgodne: ${captchaMatches ? 'tak' : 'nie'}; liczba znaków rozwiązania: ${solution.text.length}.`,
+        );
+        if (!captchaMatches) throw new AppError('PAGE_CHANGED');
         if ((await input.inputValue()) !== serial) {
           await log(
             'serial_changed',
@@ -165,8 +174,28 @@ export class AppleProvider implements CoverageProvider {
         if (validationError && validationError !== 'CAPTCHA_REJECTED')
           throw new AppError(validationError);
         await stage('reading');
+        const submit = page.getByRole('button', { name: 'Submit', exact: true });
+        try {
+          await page.waitForFunction(
+            () => {
+              const button = Array.from(document.querySelectorAll('button')).find(
+                (element) => element.textContent?.trim() === 'Submit',
+              );
+              return button && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
+            },
+            undefined,
+            { timeout: 5000 },
+          );
+        } catch {
+          await log(
+            'apple_submit_disabled',
+            'Przycisk Submit pozostał nieaktywny po wpisaniu obu pól. Formularz Apple nie zaakceptował danych wejściowych.',
+          );
+          const error = appleError(await page.locator('body').innerText());
+          throw new AppError(error && error !== 'CAPTCHA_REJECTED' ? error : 'PAGE_CHANGED');
+        }
         await log('apple_submit', 'Wysyłanie formularza Apple.');
-        await page.getByRole('button', { name: 'Submit', exact: true }).click();
+        await submit.click();
         await log('apple_result', 'Oczekiwanie na dane gwarancji lub komunikat Apple.');
         const result = await this.awaitResult(page, serial, signal);
         if (result !== 'CAPTCHA_REJECTED') {
