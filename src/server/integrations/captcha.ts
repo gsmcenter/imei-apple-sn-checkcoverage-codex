@@ -11,6 +11,7 @@ export class CaptchaClient {
     private timeoutMs: number,
     private fetcher: typeof fetch = fetch,
     private pollMs = 5000,
+    private log?: (step: string, message: string) => Promise<void>,
   ) {}
 
   private async call(method: string, payload: object, signal: AbortSignal) {
@@ -23,13 +24,26 @@ export class CaptchaClient {
       });
       if (!r.ok) throw new AppError('CAPTCHA_SERVICE');
       const data = (await r.json()) as Record<string, unknown>;
-      if (data.errorId !== 0) throw new AppError('CAPTCHA_SERVICE');
+      if (data.errorId !== 0) {
+        const code =
+          typeof data.errorCode === 'string' && /^ERROR_[A-Z_]{1,60}$/.test(data.errorCode)
+            ? data.errorCode
+            : 'UNKNOWN';
+        await this.log?.('captcha_service_error', `2Captcha / ${method}: ${code}.`);
+        throw new AppError('CAPTCHA_SERVICE');
+      }
       return data;
     } catch (e) {
       if (signal.aborted) throw new AppError('CAPTCHA_TIMEOUT');
       if (e instanceof AppError) throw e;
       throw new AppError('CAPTCHA_SERVICE');
     }
+  }
+  async getBalance(): Promise<number> {
+    const data = await this.call('getBalance', {}, AbortSignal.timeout(15000));
+    if (typeof data.balance !== 'number' || !Number.isFinite(data.balance) || data.balance < 0)
+      throw new AppError('CAPTCHA_SERVICE');
+    return data.balance;
   }
   async solve(image: string, parent: AbortSignal): Promise<CaptchaSolution> {
     if (
@@ -68,7 +82,7 @@ export class CaptchaClient {
     }
     throw new AppError('CAPTCHA_TIMEOUT');
   }
-  async reportIncorrect(taskId: number) {
+  async reportIncorrect(taskId: number | string) {
     // Failure to report never starts another paid task or replaces the original result.
     try {
       await this.call('reportIncorrect', { taskId }, AbortSignal.timeout(5000));

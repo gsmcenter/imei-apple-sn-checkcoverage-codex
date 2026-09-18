@@ -11,7 +11,8 @@ export const errors = {
   PAGE_CHANGED:
     'Nie udało się rozpoznać formularza lub wyniku Apple. Integracja wymaga sprawdzenia.',
   CAPTCHA_FAILED: 'Nie udało się rozwiązać CAPTCHA w dozwolonej liczbie prób.',
-  CAPTCHA_SERVICE: '2Captcha odrzuciło zadanie. Sprawdź klucz API i saldo konta.',
+  CAPTCHA_SERVICE:
+    'Solver CAPTCHA odrzucił zadanie lub jest niedostępny. Sprawdź dziennik, klucz API i stan konta.',
   CAPTCHA_TIMEOUT: 'Upłynął czas oczekiwania na rozwiązanie CAPTCHA.',
   PROXY_ERROR: 'Nie udało się połączyć przez ProxyMesh. Sprawdź serwer i dane dostępowe.',
   CHECK_TIMEOUT: 'Sprawdzenie przekroczyło limit czasu. Możesz uruchomić nowe sprawdzenie.',

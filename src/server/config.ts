@@ -18,6 +18,7 @@ const schema = z.object({
   ADMIN_PASSWORD_HASH: z.string().regex(/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/),
   SESSION_SECRET: z.string().min(32),
   TWOCAPTCHA_API_KEY: optionalSecret,
+  CAPTCHAAI_API_KEY: optionalSecret,
   PROXY_SERVER: optionalSecret,
   PROXY_USERNAME: optionalSecret,
   PROXY_PASSWORD: optionalSecret,
@@ -62,5 +63,16 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return c;
 }
 export function integrationsConfigured(c: Config): boolean {
-  return Boolean(c.TWOCAPTCHA_API_KEY && c.PROXY_SERVER && c.PROXY_USERNAME && c.PROXY_PASSWORD);
+  return Boolean(
+    (c.TWOCAPTCHA_API_KEY || c.CAPTCHAAI_API_KEY) &&
+    c.PROXY_SERVER &&
+    c.PROXY_USERNAME &&
+    c.PROXY_PASSWORD,
+  );
+}
+export function solverConfigured(
+  c: Config,
+  solver: import('../shared/system.js').SolverId,
+): boolean {
+  return Boolean(solver === 'captchaai' ? c.CAPTCHAAI_API_KEY : c.TWOCAPTCHA_API_KEY);
 }

@@ -6,16 +6,24 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { z, ZodError } from 'zod';
 import type { Config } from './config.js';
-import { integrationsConfigured } from './config.js';
+import { integrationsConfigured, solverConfigured } from './config.js';
 import { Repository } from './repository.js';
 import { AppError, normalizeSerial } from './errors.js';
 import { newToken, privateKey, verifyPassword } from './security.js';
+import { proxyModes, solverIds } from '../shared/system.js';
+import { CaptchaClient } from './integrations/captcha.js';
+import { cachedBalance } from './balance.js';
 
 const idSchema = z.string().uuid();
 export async function createApp(
   config: Config,
   repo: Repository,
-  options: { demo?: boolean; logger?: boolean; workerHealthy?: () => boolean } = {},
+  options: {
+    demo?: boolean;
+    logger?: boolean;
+    workerHealthy?: () => boolean;
+    readBalance?: () => Promise<number>;
+  } = {},
 ) {
   const app = Fastify({
     bodyLimit: 4096,
@@ -138,6 +146,28 @@ export async function createApp(
     return { authenticated: false };
   });
   app.get('/api/v1/overview', async () => repo.overview(!!options.demo));
+  const balance = cachedBalance(
+    options.readBalance ??
+      (config.TWOCAPTCHA_API_KEY
+        ? () =>
+            new CaptchaClient(config.TWOCAPTCHA_API_KEY!, config.CAPTCHA_TIMEOUT_MS).getBalance()
+        : undefined),
+    !!options.demo,
+  );
+  app.get('/api/v1/system', async () => repo.system(!!options.demo));
+  app.get('/api/v1/system/balance', async () => balance());
+  app.post('/api/v1/system/settings', async (req) => {
+    const settings = z
+      .object({
+        proxyMode: z.enum(proxyModes),
+        solverId: z.enum(solverIds),
+      })
+      .strict()
+      .parse(req.body);
+    if (!options.demo && !solverConfigured(config, settings.solverId))
+      throw new AppError('NOT_CONFIGURED', 503);
+    return repo.saveSettings(settings);
+  });
   app.get('/api/v1/checks', async (req) => {
     const q = z
       .object({
@@ -160,7 +190,12 @@ export async function createApp(
   app.post('/api/v1/checks', async (req, reply) => {
     const serial = normalizeSerial(z.object({ serial: z.string() }).parse(req.body).serial);
     const key = idSchema.parse(req.headers['idempotency-key']);
-    if (!options.demo && !integrationsConfigured(config)) throw new AppError('NOT_CONFIGURED', 503);
+    if (
+      !options.demo &&
+      (!integrationsConfigured(config) ||
+        !solverConfigured(config, (await repo.settings()).solverId))
+    )
+      throw new AppError('NOT_CONFIGURED', 503);
     if (!(await repo.workerOnline())) throw new AppError('WORKER_OFFLINE', 503);
     if (!(await repo.rateLimit('checks:submit', 60, 60)))
       return reply

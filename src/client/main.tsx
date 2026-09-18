@@ -26,31 +26,10 @@ import {
 import type { Check, Overview } from '../shared/types';
 import { stageLabels } from '../shared/types';
 import './styles.css';
+import { api, post, HttpError } from './api';
+import { SystemPanel } from './system-panel';
+import { duration } from '../shared/system';
 
-class HttpError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
-    super(message);
-  }
-}
-async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-  });
-  const body = await response.json();
-  if (!response.ok) {
-    if (response.status === 401 && path !== '/api/login')
-      window.dispatchEvent(new Event('session-expired'));
-    throw new HttpError(body.error || 'Nie udało się wykonać żądania.', response.status);
-  }
-  return body;
-}
-const post = <T,>(path: string, body: unknown, headers?: HeadersInit) =>
-  api<T>(path, { method: 'POST', body: JSON.stringify(body), headers });
 const date = (value: string) =>
   new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeStyle: 'short' }).format(
     new Date(value),
@@ -296,6 +275,73 @@ function Detail({
           <pre>{result.rawText}</pre>
         </details>
       )}
+      <section className="run-details" aria-label="Czasy i integracje">
+        <h3>Czasy i integracje</h3>
+        {check.finishedAt && (
+          <p>
+            Łącznie od zlecenia:{' '}
+            <strong>{duration(Date.parse(check.finishedAt) - Date.parse(check.createdAt))}</strong>
+          </p>
+        )}
+        {!check.runs?.length && <p>Brak zapisanych pomiarów dla tego sprawdzenia.</p>}
+        {check.runs?.map((run) => (
+          <div className="run-card" key={run.token}>
+            <strong>
+              Próba {run.attempt} ·{' '}
+              {
+                {
+                  running: 'W toku',
+                  completed: 'Ukończona',
+                  failed: 'Błąd',
+                  interrupted: 'Przerwana',
+                }[run.status]
+              }
+            </strong>
+            <dl className="result-fields">
+              <div>
+                <dt>Proxy</dt>
+                <dd>{run.proxy}</dd>
+              </div>
+              <div>
+                <dt>Solver przypisany</dt>
+                <dd>{run.solver}</dd>
+              </div>
+              <div>
+                <dt>Czas próby (bez kolejki)</dt>
+                <dd>{duration(run.durationMs)}</dd>
+              </div>
+              <div>
+                <dt>Od zlecenia do startu próby</dt>
+                <dd>{duration(run.queueMs)}</dd>
+              </div>
+              <div>
+                <dt>CAPTCHA · wywołania</dt>
+                <dd>
+                  {duration(run.captchaMs)} · {run.captchaCalls}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </section>
+      <details className="raw-result diagnostic-log" open={check.status === 'failed'}>
+        <summary>Dziennik diagnostyczny {check.errorCode ? `· ${check.errorCode}` : ''}</summary>
+        {!check.diagnostics?.length ? (
+          <p>Brak logów. Diagnostyka jest zapisywana dla nowych prób od tej aktualizacji.</p>
+        ) : (
+          <ol>
+            {check.diagnostics.map((entry, index) => (
+              <li key={index}>
+                <span>
+                  {new Date(entry.at).toLocaleTimeString('pl-PL')} · próba {entry.attempt} ·{' '}
+                  {entry.step}
+                </span>
+                <p>{entry.message}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </details>
       <div className="detail-actions">
         <a
           className="secondary"
@@ -320,7 +366,7 @@ function Detail({
 }
 
 function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
-  const [view, setView] = useState<'overview' | 'history'>('overview');
+  const [view, setView] = useState<'overview' | 'history' | 'system'>('overview');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [items, setItems] = useState<Check[]>([]);
   const [total, setTotal] = useState(0);
@@ -457,6 +503,13 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
             Historia sprawdzeń
             <span className="nav-count">{overview ? number(overview.total) : '—'}</span>
           </button>
+          <button
+            className={view === 'system' ? 'nav-item selected' : 'nav-item'}
+            onClick={() => setView('system')}
+          >
+            <Activity size={19} />
+            Stan systemu
+          </button>
         </nav>
         <div className="sidebar-note">
           <span className="sidebar-note-icon">
@@ -483,7 +536,9 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
         <header className="topbar">
           <span>
             Panel urządzeń<span className="breadcrumb-slash">/</span>
-            <strong>{view === 'overview' ? 'Przegląd' : 'Historia'}</strong>
+            <strong>
+              {view === 'system' ? 'Stan systemu' : view === 'overview' ? 'Przegląd' : 'Historia'}
+            </strong>
           </span>
           <span className="topbar-private">
             <LockKeyhole size={13} />
@@ -501,11 +556,19 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
           <div className="page-heading">
             <div>
               <span className="eyebrow">APPLE COVERAGE</span>
-              <h1>{view === 'overview' ? 'Sprawdź gwarancję.' : 'Historia sprawdzeń.'}</h1>
+              <h1>
+                {view === 'system'
+                  ? 'Stan systemu.'
+                  : view === 'overview'
+                    ? 'Sprawdź gwarancję.'
+                    : 'Historia sprawdzeń.'}
+              </h1>
               <p>
-                {view === 'overview'
-                  ? 'Aktualny status ochrony Twoich urządzeń, w jednym miejscu.'
-                  : 'Wszystkie numery seryjne i zapisane odpowiedzi Apple.'}
+                {view === 'system'
+                  ? 'Integracje, wydajność i diagnostyka Twoich sprawdzeń.'
+                  : view === 'overview'
+                    ? 'Aktualny status ochrony Twoich urządzeń, w jednym miejscu.'
+                    : 'Wszystkie numery seryjne i zapisane odpowiedzi Apple.'}
               </p>
             </div>
             <div className="source-label">
@@ -521,7 +584,7 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
               <CircleHelp size={18} />
               <span>
                 <strong>Tryb demonstracyjny.</strong> Przykładowe wyniki. Zapytania nie trafiają do
-                Apple, 2Captcha ani ProxyMesh.
+                Apple, solverów CAPTCHA ani ProxyMesh.
               </span>
             </div>
           )}
@@ -637,7 +700,7 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
                     {overview && !canSubmit && (
                       <div className="notice">
                         {!configured
-                          ? 'Przed pierwszym sprawdzeniem uzupełnij dane 2Captcha i ProxyMesh w zmiennych serwera.'
+                          ? 'Uzupełnij dane wybranego solvera CAPTCHA i ProxyMesh w zmiennych serwera.'
                           : 'Proces sprawdzający jest niedostępny. Uruchom usługę worker na Railway.'}
                       </div>
                     )}
@@ -657,7 +720,7 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
                   </div>
                   <div className="connection-row">
                     <span>
-                      2Captcha<small>Rozwiązywanie kodów</small>
+                      Solver CAPTCHA<small>Rozwiązywanie kodów</small>
                     </span>
                     <span
                       className={
@@ -711,158 +774,167 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
               </div>
             </>
           )}
-          <section className="history-card">
-            <div className="history-heading">
-              <div>
-                <h2>
-                  {view === 'overview' ? 'Ostatnie sprawdzenia' : 'Wszystkie sprawdzenia'}
-                  <span className="count-pill">{number(total)}</span>
-                </h2>
-                <p>Wyniki zapisują się tutaj automatycznie.</p>
+          {view === 'system' && <SystemPanel />}
+          {view !== 'system' && (
+            <section className="history-card">
+              <div className="history-heading">
+                <div>
+                  <h2>
+                    {view === 'overview' ? 'Ostatnie sprawdzenia' : 'Wszystkie sprawdzenia'}
+                    <span className="count-pill">{number(total)}</span>
+                  </h2>
+                  <p>Wyniki zapisują się tutaj automatycznie.</p>
+                </div>
+                {view === 'history' && (
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      setView('overview');
+                      serialInput.current?.focus();
+                    }}
+                  >
+                    <ArrowLeft size={15} />
+                    Nowe sprawdzenie
+                  </button>
+                )}
               </div>
-              {view === 'history' && (
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    setView('overview');
-                    serialInput.current?.focus();
-                  }}
-                >
-                  <ArrowLeft size={15} />
-                  Nowe sprawdzenie
-                </button>
-              )}
-            </div>
-            <div className="table-toolbar">
-              <div className="search-wrap">
-                <Search size={17} />
-                <input
-                  value={search}
-                  onChange={(e) =>
-                    setSearch(e.target.value.replace(/[^a-z0-9]/gi, '').slice(0, 12))
-                  }
-                  placeholder="Szukaj numeru seryjnego…"
-                  aria-label="Szukaj w historii"
-                />
+              <div className="table-toolbar">
+                <div className="search-wrap">
+                  <Search size={17} />
+                  <input
+                    value={search}
+                    onChange={(e) =>
+                      setSearch(e.target.value.replace(/[^a-z0-9]/gi, '').slice(0, 12))
+                    }
+                    placeholder="Szukaj numeru seryjnego…"
+                    aria-label="Szukaj w historii"
+                  />
+                </div>
+                <label className="filter-wrap">
+                  <SlidersHorizontal size={15} />
+                  <select
+                    value={filter}
+                    onChange={(e) => {
+                      setFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    aria-label="Filtruj według statusu"
+                  >
+                    <option value="">Wszystkie statusy</option>
+                    <option value="completed">Zakończone</option>
+                    <option value="running">W trakcie</option>
+                    <option value="queued">W kolejce</option>
+                    <option value="failed">Błędy</option>
+                  </select>
+                </label>
               </div>
-              <label className="filter-wrap">
-                <SlidersHorizontal size={15} />
-                <select
-                  value={filter}
-                  onChange={(e) => {
-                    setFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  aria-label="Filtruj według statusu"
-                >
-                  <option value="">Wszystkie statusy</option>
-                  <option value="completed">Zakończone</option>
-                  <option value="running">W trakcie</option>
-                  <option value="queued">W kolejce</option>
-                  <option value="failed">Błędy</option>
-                </select>
-              </label>
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>URZĄDZENIE / NUMER SERYJNY</th>
-                    <th>STATUS OCHRONY</th>
-                    <th>DATA SPRAWDZENIA</th>
-                    <th>
-                      <span className="sr-only">Szczegóły</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((check) => (
-                    <tr key={check.id}>
-                      <td>
-                        <div className="table-device">
-                          <span className="device-icon">
-                            <Smartphone size={20} />
-                          </span>
-                          <div>
-                            <strong>
-                              {check.result?.model ??
-                                (check.status === 'failed'
-                                  ? 'Nie odczytano urządzenia'
-                                  : 'Urządzenie Apple')}
-                            </strong>
-                            <code>{check.serial}</code>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <Status check={check} />
-                        {check.status === 'running' && (
-                          <span className="stage-caption">{stageLabels[check.stage]}</span>
-                        )}
-                      </td>
-                      <td className="date-cell">{date(check.createdAt)}</td>
-                      <td>
-                        <button
-                          className="row-action"
-                          onClick={() => setSelected(check)}
-                          aria-label={`Szczegóły ${check.serial}`}
-                        >
-                          <span>Szczegóły</span>
-                          <ChevronRight size={17} />
-                        </button>
-                      </td>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>URZĄDZENIE / NUMER SERYJNY</th>
+                      <th>STATUS OCHRONY</th>
+                      <th>DATA / CZAS / PROXY</th>
+                      <th>
+                        <span className="sr-only">Szczegóły</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {!items.length && (
-              <div className="empty-state">
-                {!loaded ? <LoaderCircle size={28} className="spin" /> : <History size={30} />}
-                <strong>
-                  {!loaded
-                    ? 'Wczytywanie historii…'
-                    : search || filter
-                      ? 'Brak pasujących sprawdzeń'
-                      : 'Tutaj zacznie się Twoja historia'}
-                </strong>
-                <p>
-                  {search || filter
-                    ? 'Zmień numer seryjny lub wybrany status.'
-                    : 'Wprowadź pierwszy numer seryjny powyżej. Zachowamy wynik i datę sprawdzenia.'}
-                </p>
+                  </thead>
+                  <tbody>
+                    {items.map((check) => (
+                      <tr key={check.id}>
+                        <td>
+                          <div className="table-device">
+                            <span className="device-icon">
+                              <Smartphone size={20} />
+                            </span>
+                            <div>
+                              <strong>
+                                {check.result?.model ??
+                                  (check.status === 'failed'
+                                    ? 'Nie odczytano urządzenia'
+                                    : 'Urządzenie Apple')}
+                              </strong>
+                              <code>{check.serial}</code>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <Status check={check} />
+                          {check.status === 'running' && (
+                            <span className="stage-caption">{stageLabels[check.stage]}</span>
+                          )}
+                        </td>
+                        <td className="date-cell">
+                          {date(check.createdAt)}
+                          <span className="stage-caption">
+                            {duration(check.runs?.at(-1)?.durationMs)} ·{' '}
+                            {check.runs?.at(-1)?.proxy ?? 'Brak pomiaru'}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="row-action"
+                            onClick={() => setSelected(check)}
+                            aria-label={`Szczegóły ${check.serial}`}
+                          >
+                            <span>Szczegóły</span>
+                            <ChevronRight size={17} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
-            <div className="table-footer">
-              <span>
-                {total
-                  ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, total)} z ${number(total)} sprawdzeń`
-                  : '0 sprawdzeń'}
-                <span className="retention-note">Historia bez automatycznego usuwania</span>
-              </span>
-              <div className="pagination">
-                <button
-                  className="icon-button"
-                  disabled={page <= 1}
-                  onClick={() => setPage(page - 1)}
-                  aria-label="Poprzednia strona"
-                >
-                  <ChevronLeft size={17} />
-                </button>
+              {!items.length && (
+                <div className="empty-state">
+                  {!loaded ? <LoaderCircle size={28} className="spin" /> : <History size={30} />}
+                  <strong>
+                    {!loaded
+                      ? 'Wczytywanie historii…'
+                      : search || filter
+                        ? 'Brak pasujących sprawdzeń'
+                        : 'Tutaj zacznie się Twoja historia'}
+                  </strong>
+                  <p>
+                    {search || filter
+                      ? 'Zmień numer seryjny lub wybrany status.'
+                      : 'Wprowadź pierwszy numer seryjny powyżej. Zachowamy wynik i datę sprawdzenia.'}
+                  </p>
+                </div>
+              )}
+              <div className="table-footer">
                 <span>
-                  {page} / {pages}
+                  {total
+                    ? `${(page - 1) * 25 + 1}–${Math.min(page * 25, total)} z ${number(total)} sprawdzeń`
+                    : '0 sprawdzeń'}
+                  <span className="retention-note">Historia bez automatycznego usuwania</span>
                 </span>
-                <button
-                  className="icon-button"
-                  disabled={page >= pages}
-                  onClick={() => setPage(page + 1)}
-                  aria-label="Następna strona"
-                >
-                  <ChevronRight size={17} />
-                </button>
+                <div className="pagination">
+                  <button
+                    className="icon-button"
+                    disabled={page <= 1}
+                    onClick={() => setPage(page - 1)}
+                    aria-label="Poprzednia strona"
+                  >
+                    <ChevronLeft size={17} />
+                  </button>
+                  <span>
+                    {page} / {pages}
+                  </span>
+                  <button
+                    className="icon-button"
+                    disabled={page >= pages}
+                    onClick={() => setPage(page + 1)}
+                    aria-label="Następna strona"
+                  >
+                    <ChevronRight size={17} />
+                  </button>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
           <footer className="page-footer">
             <span>
               Coverage Desk <span>•</span> Niezależne narzędzie, niepowiązane z Apple Inc.

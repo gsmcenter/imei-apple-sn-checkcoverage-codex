@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS captcha_usage (day DATE PRIMARY KEY, count INTEGER NO
 CREATE TABLE IF NOT EXISTS worker_heartbeats (id UUID PRIMARY KEY, seen_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS queue_state (id INTEGER PRIMARY KEY, last_started TIMESTAMPTZ);
 INSERT INTO queue_state (id, last_started) VALUES (1, NULL) ON CONFLICT DO NOTHING;
+ALTER TABLE checks ADD COLUMN IF NOT EXISTS runs JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE checks ADD COLUMN IF NOT EXISTS diagnostics JSONB NOT NULL DEFAULT '[]'::jsonb;
+CREATE TABLE IF NOT EXISTS system_settings (
+ id INTEGER PRIMARY KEY CHECK(id=1), proxy_mode TEXT NOT NULL,
+ solver_id TEXT NOT NULL DEFAULT '2captcha', updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS captcha_measurements (
+ id UUID PRIMARY KEY, check_id UUID NOT NULL REFERENCES checks(id), token UUID NOT NULL,
+ solver TEXT NOT NULL, started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+ duration_ms DOUBLE PRECISION, outcome TEXT NOT NULL DEFAULT 'running'
+);
+CREATE INDEX IF NOT EXISTS captcha_measurements_check ON captcha_measurements(check_id);
 `;
 
 export async function migrate(db: Database): Promise<void> {

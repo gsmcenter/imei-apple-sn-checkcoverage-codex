@@ -28,6 +28,8 @@ export interface Check {
   errorMessage: string | null;
   createdAt: string;
   finishedAt: string | null;
+  runs?: import('./system.js').Run[];
+  diagnostics?: import('./system.js').Diagnostic[];
 }
 
 export interface Overview {

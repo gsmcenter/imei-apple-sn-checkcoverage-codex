@@ -1,3 +1,4 @@
+import type { SolverId } from '../shared/system.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { CoverageProvider } from './integrations/apple.js';
@@ -12,7 +13,13 @@ export function startWorker(repo: Repository, provider: CoverageProvider) {
   let lastHousekeeping = 0;
   let healthy = true;
 
-  async function processJob(job: { id: string; serial: string; token: string }) {
+  async function processJob(job: {
+    id: string;
+    serial: string;
+    token: string;
+    proxy: string;
+    solver: SolverId;
+  }) {
     const controller = new AbortController();
     runningControllers.add(controller);
     const signal = AbortSignal.any([
@@ -32,10 +39,27 @@ export function startWorker(repo: Repository, provider: CoverageProvider) {
       }
     }, 15000);
     try {
-      const result = await provider.check(job.serial, signal, (stage) =>
-        repo.stage(job.id, job.token, stage),
+      await repo.diagnostic(
+        job.id,
+        job.token,
+        'started',
+        `Rozpoczęto sprawdzenie; proxy: ${job.proxy}; solver: ${job.solver}.`,
+      );
+      const result = await provider.check(
+        job.serial,
+        signal,
+        (stage) => repo.stage(job.id, job.token, stage),
+        {
+          proxy: job.proxy,
+          solver: job.solver,
+          log: (step, message) => repo.diagnostic(job.id, job.token, step, message),
+          beginCaptcha: () => repo.beginCaptcha(job.id, job.token, job.solver),
+          endCaptcha: (measurement, ms, outcome) =>
+            repo.endCaptcha(job.id, job.token, measurement, ms, outcome),
+        },
       );
       signal.throwIfAborted();
+      await repo.diagnostic(job.id, job.token, 'completed', 'Sprawdzenie zakończone poprawnie.');
       await repo.finish(job.id, job.token, result, null);
       console.info(JSON.stringify({ event: 'check_finished', id: job.id, status: 'completed' }));
     } catch (e) {
@@ -46,6 +70,12 @@ export function startWorker(repo: Repository, provider: CoverageProvider) {
           : e instanceof AppError
             ? e.code
             : 'INTERNAL_ERROR';
+        await repo.diagnostic(
+          job.id,
+          job.token,
+          'failed',
+          `${code}: ${new AppError(code).message}`,
+        );
         await repo.finish(job.id, job.token, null, code);
         console.info(
           JSON.stringify({ event: 'check_finished', id: job.id, status: 'failed', code }),

@@ -12,14 +12,14 @@ const origin = 'http://localhost:3000';
 before(async () => {
   ctx = await setup();
   repo = new Repository(ctx.db, ctx.config);
-  app = await createApp(ctx.config, repo, { logger: false });
+  app = await createApp(ctx.config, repo, { logger: false, readBalance: async () => 12.34 });
 });
 after(async () => {
   await app?.close();
   await ctx?.db.close();
 });
 beforeEach(async () => {
-  await ctx.db.query('TRUNCATE rate_limits,checks');
+  await ctx.db.query('TRUNCATE captcha_measurements,system_settings,rate_limits,checks');
   const res = await app.inject({
     method: 'POST',
     url: '/api/login',
@@ -119,4 +119,39 @@ test('login attempts are rate limited in the database', async () => {
     payload: { password: 'correct-test-password' },
   });
   assert.equal(r.statusCode, 429);
+});
+
+test('system settings and balance are private; only supported integrations and same-origin writes are allowed', async () => {
+  for (const url of ['/api/v1/system', '/api/v1/system/balance'])
+    assert.equal((await app.inject(url)).statusCode, 401);
+  const cookies = { coverage_session: session };
+  assert.equal((await app.inject({ url: '/api/v1/system', cookies })).statusCode, 200);
+  const balance = await app.inject({ url: '/api/v1/system/balance', cookies });
+  assert.equal(balance.json().balance, 12.34);
+  for (const payload of [
+    { proxyMode: 'http://attacker.invalid', solverId: '2captcha' },
+    { proxyMode: 'random', solverId: 'unknown' },
+  ]) {
+    assert.equal(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/system/settings',
+          cookies,
+          headers: { origin },
+          payload,
+        })
+      ).statusCode,
+      400,
+    );
+  }
+  const request = {
+    method: 'POST' as const,
+    url: '/api/v1/system/settings',
+    cookies,
+    payload: { proxyMode: 'random', solverId: '2captcha' },
+  };
+  assert.equal((await app.inject(request)).statusCode, 403);
+  assert.equal((await app.inject({ ...request, headers: { origin } })).statusCode, 200);
+  assert.equal((await repo.settings()).proxyMode, 'random');
 });

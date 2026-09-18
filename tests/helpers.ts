@@ -8,7 +8,7 @@ export async function setup() {
     : await embeddedDatabase();
   await migrate(db);
   await db.query(
-    'TRUNCATE checks,sessions,rate_limits,captcha_usage,worker_heartbeats; UPDATE queue_state SET last_started=NULL',
+    'TRUNCATE captcha_measurements,system_settings,checks,sessions,rate_limits,captcha_usage,worker_heartbeats; UPDATE queue_state SET last_started=NULL',
   );
   const config = readConfig({
     NODE_ENV: 'test',

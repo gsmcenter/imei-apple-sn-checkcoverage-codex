@@ -80,3 +80,17 @@ Bez `TEST_DATABASE_URL` testy używają PGlite. Test rzeczywistej współbieżno
 - [ProxyMesh — HTTPS i sticky IP](https://docs.proxymesh.com/article/145-proxy-server-requests-over-https)
 - [Playwright — konfiguracja proxy](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-proxy)
 - [Railway — Dockerfile](https://docs.railway.com/builds/dockerfiles)
+
+## Stan systemu i pomiary
+
+Panel „Stan systemu” pozwala zapisać wspólne dla workerów proxy: `fr.proxymesh.com:31280`, `de.proxymesh.com:31280`, `open.proxymesh.com:31280` lub `random`. Losowanie jest niezależne dla każdej rozpoczynanej próby (także wznowienia po restarcie). Rozpoczęta próba zachowuje wybrane proxy i solver. Dane dostępowe ProxyMesh pozostają w zmiennych środowiskowych i muszą pozwalać na korzystanie z wybranego serwera.
+
+Ustawienia przechowujemy w PostgreSQL. Przy pierwszym użyciu odczytujemy host z `PROXY_SERVER`, jeśli jest jednym z trzech powyższych; w przeciwnym razie wybieramy `open.proxymesh.com:31280`. Dalsze zmiany `PROXY_SERVER` nie zastępują zapisanej decyzji administratora. Dostępne solvery: `2captcha` i `captchaai`. CaptchaAI wymaga `CAPTCHAAI_API_KEY` w usłudze WWW i workerze. Solver wybiera się w panelu; brak klucza uniemożliwia wybór. Pomiary obejmują osobno każde wywołanie CAPTCHA oraz całe sprawdzenie według użytego solvera. Obaj dostawcy są odpytywani co 5 sekund; nie przełączamy automatycznie dostawcy po błędzie.
+
+Saldo 2Captcha jest odczytywane przez `getBalance` i buforowane przez minutę na proces WWW; błąd odczytu nie jest traktowany jako saldo zerowe. W demo nie wysyłamy zapytania o saldo.
+
+Każda nowa próba zapisuje proxy, solver, czas rozpoczęcia/zakończenia, czas wykonania bez kolejki, czas od zlecenia do startu, liczbę wywołań i łączny czas solvera. Średnie proxy obejmują tylko udane próby (łącznie z czasem solvera), a błędy i przerwania są widoczne osobno. Średnie solverów obejmują odpowiedzi zakończone rozwiązaniem; jawnie odrzucone przez Apple kody są błędami. Po restarcie zachowujemy obie próby; czasu przerwanej próby nie szacujemy. Statystyki obejmują całą zapisaną historię pomiarów; starsze wpisy bez pomiarów nie wpływają na średnie.
+
+W szczegółach sprawdzenia dostępny jest dziennik diagnostyczny: etapy, HTTP strony Apple, kody błędów 2Captcha, czasy i ograniczony fragment widocznego tekstu Apple przy błędzie. Nie zapisujemy kluczy API, haseł, cookies, nagłówków ani obrazów/kodów CAPTCHA. Logi mają limit 100 wpisów na sprawdzenie, po maksymalnie 1800 znaków. Zachowujemy je w bazie razem z historią; są widoczne tylko po zalogowaniu.
+
+Migracja uruchamia się automatycznie przy starcie i dodaje tabele/kolumny bez usuwania dotychczasowych danych. Dotychczasowy 2Captcha nie wymaga nowych zmiennych; do CaptchaAI dodaj `CAPTCHAAI_API_KEY`.
