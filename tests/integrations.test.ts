@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { parseCoverage, appleError } from '../src/server/integrations/parser.js';
 import { CaptchaClient } from '../src/server/integrations/captcha.js';
 import { hashPassword, verifyPassword } from '../src/server/security.js';
+import { browserErrorCode, AppError } from '../src/server/errors.js';
 const serial = 'C39ABCDEFG12';
+test('browser network timeout is not mistaken for a changed Apple page', () => {
+  assert.equal(browserErrorCode(new Error('page.goto: net::ERR_TIMED_OUT')), 'CHECK_TIMEOUT');
+  assert.equal(browserErrorCode(new Error('net::ERR_TUNNEL_CONNECTION_FAILED')), 'PROXY_ERROR');
+  assert.equal(browserErrorCode(new AppError('APPLE_BLOCKED')), 'APPLE_BLOCKED');
+  assert.equal(browserErrorCode(new Error('unknown'), true), 'CHECK_TIMEOUT');
+});
 
 test('parser extracts explicit coverage labels and keeps original dates and response', () => {
   const r = parseCoverage(

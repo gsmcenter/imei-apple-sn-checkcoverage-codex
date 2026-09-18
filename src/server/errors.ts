@@ -27,6 +27,14 @@ export const errors = {
   INTERNAL_ERROR: 'Wystąpił błąd serwera. Spróbuj ponownie później.',
 } as const;
 export type ErrorCode = keyof typeof errors;
+export function browserErrorCode(error: unknown, aborted = false): ErrorCode {
+  if (aborted) return 'CHECK_TIMEOUT';
+  if (error instanceof AppError) return error.code;
+  const message = error instanceof Error ? error.message : '';
+  if (/PROXY|TUNNEL|407|ERR_CONNECTION|ERR_NAME_NOT_RESOLVED/i.test(message)) return 'PROXY_ERROR';
+  if (/Timeout|TIMED_OUT/i.test(message)) return 'CHECK_TIMEOUT';
+  return 'PAGE_CHANGED';
+}
 export class AppError extends Error {
   constructor(
     public code: ErrorCode,

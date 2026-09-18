@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Config } from '../config.js';
 import { integrationsConfigured } from '../config.js';
-import { AppError } from '../errors.js';
+import { AppError, browserErrorCode } from '../errors.js';
 import type { CoverageResult, Stage } from '../../shared/types.js';
 import { createSolver } from './solvers.js';
 import { solverLabels } from '../../shared/system.js';
@@ -106,8 +106,6 @@ export class AppleProvider implements CoverageProvider {
             : 'PAGE_CHANGED',
         );
       }
-      await input.fill(serial);
-      await log('serial_filled', 'Wpisano numer seryjny.');
       const solver = createSolver(execution.solver, c, execution.log);
       for (let attempt = 0; attempt < 2; attempt++) {
         signal.throwIfAborted();
@@ -123,6 +121,17 @@ export class AppleProvider implements CoverageProvider {
           );
           throw new AppError('PAGE_CHANGED');
         }
+        // Apple finishes initializing the form while the CAPTCHA is loading.
+        // Fill only once the complete form exists and dispatch the keyboard events used by validation.
+        await input.fill('');
+        await input.pressSequentially(serial, { delay: 40 });
+        await input.press('Tab');
+        await log(
+          'serial_filled',
+          `Wpisano numer seryjny po załadowaniu CAPTCHA; pole zgodne: ${(await input.inputValue()) === serial ? 'tak' : 'nie'}.`,
+        );
+        const formError = appleError(await page.locator('body').innerText());
+        if (formError && formError !== 'CAPTCHA_REJECTED') throw new AppError(formError);
         await this.reserveCaptcha();
         const measurement = await execution.beginCaptcha();
         let solution;
@@ -145,6 +154,16 @@ export class AppleProvider implements CoverageProvider {
         );
         signal.throwIfAborted();
         await page.locator('#captcha-input').fill(solution.text);
+        if ((await input.inputValue()) !== serial) {
+          await log(
+            'serial_changed',
+            'Strona zmieniła wartość pola SN przed wysłaniem formularza.',
+          );
+          throw new AppError('PAGE_CHANGED');
+        }
+        const validationError = appleError(await page.locator('body').innerText());
+        if (validationError && validationError !== 'CAPTCHA_REJECTED')
+          throw new AppError(validationError);
         await stage('reading');
         await log('apple_submit', 'Wysyłanie formularza Apple.');
         await page.getByRole('button', { name: 'Submit', exact: true }).click();
@@ -188,13 +207,7 @@ export class AppleProvider implements CoverageProvider {
           /* Browser may have closed following a timeout. */
         }
       }
-      if (signal.aborted) throw new AppError('CHECK_TIMEOUT');
-      if (e instanceof AppError) throw e;
-      const message = e instanceof Error ? e.message : '';
-      if (/PROXY|TUNNEL|407|ERR_CONNECTION|ERR_NAME_NOT_RESOLVED/i.test(message))
-        throw new AppError('PROXY_ERROR');
-      if (/Timeout/i.test(message)) throw new AppError('CHECK_TIMEOUT');
-      throw new AppError('PAGE_CHANGED');
+      throw new AppError(browserErrorCode(e, signal.aborted));
     } finally {
       signal.removeEventListener('abort', close);
       await browser?.close().catch(() => {});
