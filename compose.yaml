@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: coverage
+      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_DB: coverage
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - coverage_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U coverage -d coverage']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  app:
+    build: .
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      APP_ROLE: all
+      DATABASE_URL: postgresql://coverage:local-development-only@postgres:5432/coverage
+      APP_ORIGIN: http://localhost:3000
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    shm_size: 512mb
+volumes:
+  coverage_data:

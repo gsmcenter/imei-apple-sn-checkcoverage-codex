@@ -1,0 +1,44 @@
+{
+  "name": "apple-coverage-desk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server/main.ts",
+    "dev:ui": "vite --host 127.0.0.1",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server/main.js",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "preview:demo": "tsx scripts/demo.ts",
+    "password": "tsx scripts/password.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.2",
+    "@fastify/helmet": "13.1.1",
+    "@fastify/static": "10.1.4",
+    "dotenv": "18.0.0",
+    "fastify": "5.12.5",
+    "lucide-react": "1.47.0",
+    "pg": "8.23.0",
+    "playwright": "1.63.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@types/node": "26.6.1",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "prettier": "3.9.8",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2",
+    "vite": "8.3.0"
+  }
+}
