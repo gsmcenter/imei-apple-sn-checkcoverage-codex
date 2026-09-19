@@ -7,7 +7,7 @@ Prywatny panel do sprawdzania gwarancji urządzeń Apple po **numerze seryjnym**
 - React + TypeScript: logowanie hasłem, formularz SN, aktualizowany status, historia z wyszukiwaniem, filtrowaniem i paginacją oraz szczegóły odpowiedzi.
 - Fastify: prywatne endpointy `/api/v1`, sesje HttpOnly, sprawdzanie Origin, limity logowania zapisane w bazie.
 - PostgreSQL: trwała historia i kolejka, atomowe pobieranie zadań, globalna kontrola równoległości, dzienne limity i ochrona przed duplikatami.
-- Playwright/Chromium: obsługa strony Apple w osobnej sesji przez ProxyMesh. Brak automatycznego przełączenia na połączenie bez proxy.
+- Playwright/Chromium: obsługa strony Apple w osobnej sesji przez ProxyMesh lub Evomi. Brak automatycznego przełączenia na połączenie bez proxy.
 - 2Captcha API v2: `ImageToTextTask`, odpytywanie wyniku co 5 sekund, maksymalnie dwie próby CAPTCHA w jednym wykonaniu, zgłaszanie błędnych odpowiedzi.
 - Docker, konfiguracja Railway i GitHub Actions z PostgreSQL oraz budową obrazu Docker.
 
@@ -48,7 +48,7 @@ Domyślnie: 2 równoległe sprawdzenia globalnie, co najmniej 3 sekundy pomiędz
 
 Ponowione żądanie z tym samym `Idempotency-Key` nie tworzy nowego zadania. Równoczesne żądania dla tego samego SN zwracają już aktywne sprawdzenie. Ponowne sprawdzenie zakończonego SN tworzy nowy wpis i wykonuje świeży odczyt.
 
-Worker przedłuża dzierżawę zadania co 15 sekund. Po 60 sekundach bez przedłużenia zadanie może zostać wznowione. Token dzierżawy nie pozwala staremu workerowi nadpisać wyniku nowego. Maksymalnie dwa wykonania po awarii procesu; błędy Apple/proxy/2Captcha nie są automatycznie ponawiane. Jedno wykonanie może wysłać do dwóch CAPTCHA, więc awaria w trakcie zadania może spowodować łącznie do czterech płatnych zgłoszeń. Limit CAPTCHA liczy także niepewne lub odrzucone wysyłki, aby konserwatywnie ograniczać koszty. Nie gwarantuje rozliczenia dokładnie raz w zewnętrznym serwisie.
+Worker przedłuża dzierżawę zadania co 15 sekund. Po 60 sekundach bez przedłużenia zadanie może zostać wznowione. Token dzierżawy nie pozwala staremu workerowi nadpisać wyniku nowego. Maksymalnie dwa wykonania po awarii procesu. Zwykłe błędy Apple/proxy/solvera nie są automatycznie ponawiane; wyjątkiem jest osobna pula ponowień limitu Apple opisana w [docs/PROXIES.md](docs/PROXIES.md). Jedna sesja może wysłać do dwóch CAPTCHA. Kolejne sesje mogą zwiększyć koszt; limit wykryty przed wysyłką CAPTCHA nie generuje tego kosztu. Limit CAPTCHA liczy także niepewne lub odrzucone wysyłki. Nie gwarantuje rozliczenia dokładnie raz w zewnętrznym serwisie.
 
 ## Bezpieczeństwo i dane
 
@@ -87,15 +87,15 @@ Menu **Paczki SN** pozwala tworzyć nazwane paczki z notatką, wkleić SN lub wc
 
 Paczki i pozycje są zapisane w PostgreSQL. Worker stopniowo dodaje pozycje do dotychczasowej kolejki z zachowaniem `MAX_PENDING_CHECKS`, `MAX_CHECKS_PER_DAY`, limitu CAPTCHA, odstępów startów i współbieżności. Limit 50 000 pozycji oczekujących we wszystkich paczkach ogranicza backlog. Dzienny limit odblokowuje się po północy UTC; restart lub zamknięcie panelu nie usuwa paczek. Brak konfiguracji solvera wstrzymuje uruchamianie pracy, a osiągnięcie limitu CAPTCHA wstrzymuje start nowych sprawdzeń.
 
-Wstrzymanie / wznowienie oraz anulowanie dotyczą **tylko pozycji niewysłanych do kolejki**. Już zakolejkowane i trwające zadania dokończą pracę, także jeśli są współdzielone przez inne paczki. Anulowana paczka zachowuje historię. Nie ma automatycznych ponowień błędów Apple/solvera: przycisk „Ponów błędy” tworzy nową paczkę z aktualnie nieudanymi SN i odnośnikiem do źródła. Zakończone wcześniej sprawdzenia nie zastępują nowych; aktywne sprawdzenie tego samego SN może być współdzielone, bez kolejnego płatnego zadania.
+Wstrzymanie / wznowienie oraz anulowanie dotyczą **tylko pozycji niewysłanych do kolejki**. Już zakolejkowane i trwające zadania dokończą pracę, także jeśli są współdzielone przez inne paczki. Anulowana paczka zachowuje historię. Poza osobną pulą ponowień limitu Apple nie ponawiamy automatycznie błędów Apple/solvera: przycisk „Ponów błędy” tworzy nową paczkę z aktualnie nieudanymi SN i odnośnikiem do źródła. Zakończone wcześniej sprawdzenia nie zastępują nowych; aktywne sprawdzenie tego samego SN może być współdzielone, bez kolejnego płatnego zadania.
 
-Widok paczki ma postęp, liczniki, wyszukiwanie SN, filtry, stronicowanie, zmianę nazwy/notatki oraz szczegóły z logami i pomiarami. Eksport CSV pobiera **wszystkie pozycje zgodne z bieżącym filtrem**, nie tylko widoczną stronę; zawiera wyniki, błędy, daty, proxy, solver i czasy ostatniej próby. UTF-8 z BOM, separator średnik, ochrona komórek przed formułami. Proxy i solver są pobierane ze Stanu systemu przy starcie każdej próby i zapisywane w jej historii. Nowe tabele dodaje automatyczna migracja; nie potrzeba nowych zmiennych Railway.
+Widok paczki ma postęp, liczniki, wyszukiwanie SN, filtry, stronicowanie, zmianę nazwy/notatki oraz szczegóły z logami i pomiarami. Eksport CSV pobiera **wszystkie pozycje zgodne z bieżącym filtrem**, nie tylko widoczną stronę; zawiera wyniki, błędy, daty, proxy, solver i czasy ostatniej próby. UTF-8 z BOM, separator średnik, ochrona komórek przed formułami. Proxy wybieramy raz na całe sprawdzenie, a solver przy starcie każdej próby; oba zapisujemy w historii. Nowe tabele dodaje automatyczna migracja; nie potrzeba nowych zmiennych Railway.
 
 ## Stan systemu i pomiary
 
-Panel „Stan systemu” pozwala zapisać wspólne dla workerów proxy: `fr.proxymesh.com:31280`, `de.proxymesh.com:31280`, `open.proxymesh.com:31280` lub `random`. Losowanie jest niezależne dla każdej rozpoczynanej próby (także wznowienia po restarcie). Rozpoczęta próba zachowuje wybrane proxy i solver. Dane dostępowe ProxyMesh pozostają w zmiennych środowiskowych i muszą pozwalać na korzystanie z wybranego serwera.
+Panel „Stan systemu” pokazuje hosty ProxyMesh z `PROXY_HOSTS` oraz etykiety z `PROXY_EXTRA_URLS`, w tym Evomi. Przy co najmniej dwóch wpisach udostępnia „Losowo”. Proxy losujemy raz na całe sprawdzenie, także przy wznowieniach. Każda nowa sesja Apple otrzymuje świeży token `{session}`. Dane dostępowe pozostają w zmiennych środowiskowych. Konfiguracja, diagnostyka CONNECT i nowe pomiary: [docs/PROXIES.md](docs/PROXIES.md).
 
-Ustawienia przechowujemy w PostgreSQL. Przy pierwszym użyciu odczytujemy host z `PROXY_SERVER`, jeśli jest jednym z trzech powyższych; w przeciwnym razie wybieramy `open.proxymesh.com:31280`. Dalsze zmiany `PROXY_SERVER` nie zastępują zapisanej decyzji administratora. Dostępne solvery: `2captcha` i `captchaai`. CaptchaAI wymaga `CAPTCHAAI_API_KEY` w usłudze WWW i workerze. Solver wybiera się w panelu; brak klucza uniemożliwia wybór. Pomiary obejmują osobno każde wywołanie CAPTCHA oraz całe sprawdzenie według użytego solvera. Obaj dostawcy są odpytywani co 5 sekund; nie przełączamy automatycznie dostawcy po błędzie.
+Ustawienia przechowujemy w PostgreSQL. Usunięty wybór proxy wraca do skonfigurowanego domyślnego hosta lub pierwszego dostępnego wpisu, bez zmiany solvera. Dostępne solvery: `2captcha` i `captchaai`. CaptchaAI wymaga `CAPTCHAAI_API_KEY` w usłudze WWW i workerze. Solver wybiera się w panelu; brak klucza uniemożliwia wybór. Pomiary obejmują osobno każde wywołanie CAPTCHA oraz całe sprawdzenie według użytego solvera. Obaj dostawcy są odpytywani co 5 sekund; nie przełączamy automatycznie dostawcy po błędzie.
 
 Saldo 2Captcha jest odczytywane przez `getBalance` i buforowane przez minutę na proces WWW; błąd odczytu nie jest traktowany jako saldo zerowe. W demo nie wysyłamy zapytania o saldo.
 

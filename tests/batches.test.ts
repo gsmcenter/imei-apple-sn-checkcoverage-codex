@@ -27,7 +27,7 @@ after(async () => {
 });
 beforeEach(async () => {
   await ctx.db.query(
-    'TRUNCATE batch_items,batches,captcha_measurements,checks,captcha_usage,rate_limits; UPDATE queue_state SET last_started=NULL',
+    'TRUNCATE apple_sessions,batch_items,batches,captcha_measurements,checks,captcha_usage,rate_limits; UPDATE queue_state SET last_started=NULL',
   );
   ctx.config.MAX_PENDING_CHECKS = 200;
   ctx.config.MAX_CHECKS_PER_DAY = 1500;

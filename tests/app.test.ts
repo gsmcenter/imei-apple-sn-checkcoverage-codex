@@ -20,7 +20,7 @@ after(async () => {
 });
 beforeEach(async () => {
   await ctx.db.query(
-    'TRUNCATE batch_items,batches,captcha_measurements,system_settings,rate_limits,checks',
+    'TRUNCATE apple_sessions,batch_items,batches,captcha_measurements,system_settings,rate_limits,checks',
   );
   const res = await app.inject({
     method: 'POST',

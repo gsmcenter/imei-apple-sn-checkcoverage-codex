@@ -88,6 +88,15 @@ CREATE TABLE IF NOT EXISTS batch_items (
 CREATE INDEX IF NOT EXISTS batch_items_waiting ON batch_items(batch_id,position) WHERE check_id IS NULL AND NOT cancelled;
 CREATE INDEX IF NOT EXISTS batch_items_check ON batch_items(check_id);
 CREATE INDEX IF NOT EXISTS batches_history ON batches(created_at DESC,id DESC);
+ALTER TABLE checks ADD COLUMN IF NOT EXISTS selected_proxy TEXT;
+CREATE TABLE IF NOT EXISTS apple_sessions (
+ id UUID PRIMARY KEY,check_id UUID NOT NULL REFERENCES checks(id),token UUID NOT NULL,proxy TEXT NOT NULL,
+ started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),finished_at TIMESTAMPTZ,
+ apple_ms DOUBLE PRECISION,limited BOOLEAN NOT NULL DEFAULT false,limit_stage TEXT,
+ exit_ip TEXT,stages TEXT[] NOT NULL DEFAULT ARRAY['opening']::text[],
+ concurrency INTEGER NOT NULL,queued INTEGER NOT NULL,outcome TEXT NOT NULL DEFAULT 'running'
+);
+CREATE INDEX IF NOT EXISTS apple_sessions_check ON apple_sessions(check_id,token);
 `;
 
 export async function migrate(db: Database): Promise<void> {

@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { proxyCatalog } from './proxies.js';
 
 dotenv.config({ quiet: true });
 
@@ -22,6 +23,10 @@ const schema = z.object({
   PROXY_SERVER: optionalSecret,
   PROXY_USERNAME: optionalSecret,
   PROXY_PASSWORD: optionalSecret,
+  PROXY_URL: optionalSecret,
+  PROXY_HOSTS: z.string().optional(),
+  PROXY_EXTRA_URLS: z.string().optional(),
+  RATE_LIMIT_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   MAX_CHECKS_PER_DAY: z.coerce.number().int().min(1).default(1500),
   MAX_CAPTCHAS_PER_DAY: z.coerce.number().int().min(1).default(3000),
@@ -47,7 +52,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (c.NODE_ENV === 'production' && origin.protocol !== 'https:')
     throw new Error('Produkcja wymaga APP_ORIGIN z HTTPS.');
   if (c.PROXY_SERVER) {
-    const proxy = new URL(c.PROXY_SERVER);
+    let proxy: URL;
+    try {
+      proxy = new URL(c.PROXY_SERVER);
+    } catch {
+      throw new Error('Niepoprawna konfiguracja: PROXY_SERVER');
+    }
     if (
       !['http:', 'https:'].includes(proxy.protocol) ||
       proxy.username ||
@@ -60,15 +70,11 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
         'PROXY_SERVER musi być adresem HTTP(S) host:port; poświadczenia podaj osobno.',
       );
   }
+  proxyCatalog(c);
   return c;
 }
 export function integrationsConfigured(c: Config): boolean {
-  return Boolean(
-    (c.TWOCAPTCHA_API_KEY || c.CAPTCHAAI_API_KEY) &&
-    c.PROXY_SERVER &&
-    c.PROXY_USERNAME &&
-    c.PROXY_PASSWORD,
-  );
+  return Boolean((c.TWOCAPTCHA_API_KEY || c.CAPTCHAAI_API_KEY) && proxyCatalog(c).length);
 }
 export function solverConfigured(
   c: Config,

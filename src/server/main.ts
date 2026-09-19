@@ -14,7 +14,7 @@ async function main() {
   if (config.APP_ROLE !== 'web' && !integrationsConfigured(config)) {
     await db.close();
     throw new Error(
-      'Worker wymaga TWOCAPTCHA_API_KEY, PROXY_SERVER, PROXY_USERNAME i PROXY_PASSWORD.',
+      'Worker wymaga klucza solvera oraz skonfigurowanego ProxyMesh lub PROXY_EXTRA_URLS.',
     );
   }
   const worker =
@@ -26,16 +26,17 @@ async function main() {
       ? Fastify({ logger: true, logController: new LogController({ disableRequestLogging: true }) })
       : await createApp(config, repo);
   if (config.APP_ROLE === 'worker') {
-    app.get('/healthz', async (_, reply) => {
-      try {
-        await db.query('SELECT 1');
-        return worker?.healthy()
-          ? { status: 'ok' }
-          : reply.code(503).send({ status: 'unavailable' });
-      } catch {
-        return reply.code(503).send({ status: 'unavailable' });
-      }
-    });
+    for (const path of ['/healthz', '/api/health'])
+      app.get(path, async (_, reply) => {
+        try {
+          await db.query('SELECT 1');
+          return worker?.healthy()
+            ? { status: 'ok' }
+            : reply.code(503).send({ status: 'unavailable' });
+        } catch {
+          return reply.code(503).send({ status: 'unavailable' });
+        }
+      });
   }
   await app.listen({ port: config.PORT, host: config.HOST });
   let closing = false;

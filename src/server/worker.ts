@@ -22,6 +22,7 @@ export function startWorker(repo: Repository, provider: CoverageProvider, demo =
     token: string;
     proxy: string;
     solver: SolverId;
+    priorRateLimits?: number;
   }) {
     const controller = new AbortController();
     runningControllers.add(controller);
@@ -54,7 +55,10 @@ export function startWorker(repo: Repository, provider: CoverageProvider, demo =
         (stage) => repo.stage(job.id, job.token, stage),
         {
           proxy: job.proxy,
+          priorRateLimits: job.priorRateLimits,
           solver: job.solver,
+          beginSession: () => repo.beginSession(job.id, job.token, job.proxy),
+          endSession: (sid, m) => repo.endSession(job.id, job.token, sid, m),
           log: (step, message) => repo.diagnostic(job.id, job.token, step, message),
           beginCaptcha: () => repo.beginCaptcha(job.id, job.token, job.solver),
           endCaptcha: (measurement, ms, outcome) =>

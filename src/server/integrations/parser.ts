@@ -2,6 +2,8 @@ import type { CoverageResult } from '../../shared/types.js';
 import { AppError, type ErrorCode } from '../errors.js';
 
 export function appleError(text: string): ErrorCode | 'CAPTCHA_REJECTED' | null {
+  if (/we[’']?ll be back|we(?:[’']re| are) busy updating our support tools/i.test(text))
+    return 'APPLE_RATE_LIMITED';
   if (
     /incorrect.{0,30}(code|characters)|code.{0,40}(incorrect|doesn.t match)|characters.{0,40}(incorrect|do not match)|enter the code.{0,30}(again|correctly)/i.test(
       text,

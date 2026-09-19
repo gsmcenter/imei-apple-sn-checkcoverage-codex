@@ -316,8 +316,8 @@ export function BatchPanel({
           </label>
           <p className="field-help">
             Aktywne sprawdzenie tego samego SN jest współdzielone. Wcześniej zakończone SN będą
-            sprawdzane ponownie. Nowe sprawdzenia mogą zużywać saldo solvera; proxy i solver są
-            wybierane ze Stanu systemu przy starcie każdej próby.
+            sprawdzane ponownie. Nowe sprawdzenia mogą zużywać saldo solvera. Proxy wybieramy ze
+            Stanu systemu raz na sprawdzenie, a solver przy starcie każdej próby.
           </p>
           <button
             className="primary"

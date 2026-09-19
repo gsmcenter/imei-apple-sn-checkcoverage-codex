@@ -4,7 +4,7 @@ export const proxyHosts = [
   'open.proxymesh.com:31280',
 ] as const;
 export const proxyModes = [...proxyHosts, 'random'] as const;
-export type ProxyMode = (typeof proxyModes)[number];
+export type ProxyMode = string;
 export const solverIds = ['2captcha', 'captchaai'] as const;
 export type SolverId = (typeof solverIds)[number];
 export const solverLabels: Record<SolverId, string> = {
@@ -27,6 +27,9 @@ export interface Run {
   queueMs: number;
   captchaMs: number;
   captchaCalls: number;
+  appleMs?: number;
+  sessions?: number;
+  rateLimits?: number;
 }
 export interface Diagnostic {
   at: string;
@@ -46,6 +49,9 @@ export interface Metric {
   checkSamples?: number;
 }
 export interface SystemStatus {
+  proxyOptions: { label: string; provider: string }[];
+  proxyPerformance: ProxyPerformance[];
+  limits: LimitMetric[];
   settings: SystemSettings;
   proxies: Metric[];
   solvers: Metric[];
@@ -64,6 +70,51 @@ export interface SystemStatus {
   role: string;
   demo: boolean;
   solverConfigured: Record<SolverId, boolean>;
+}
+export interface ProxyPerformance {
+  name: string;
+  total: number;
+  completed: number;
+  failed: number;
+  averageMs: number | null;
+  medianMs: number | null;
+  sessions: number;
+  limits: number;
+  proxyErrors: number;
+}
+export interface LimitMetric {
+  dimension: 'proxy' | 'concurrency' | 'stage' | 'hour';
+  name: string;
+  sessions: number;
+  limited: number;
+}
+export interface ProxyProbeResult {
+  ok: boolean;
+  status?: number;
+  ms: number;
+  exitIp?: string;
+  reason?: string;
+}
+export interface ProxyTest {
+  label: string;
+  configured: ProxyProbeResult;
+  bare: ProxyProbeResult;
+  diagnosis: string;
+  info: {
+    username: string;
+    passwordLength: number;
+    basePasswordLength: number;
+    params: string[];
+    warnings: string[];
+  };
+}
+export type ProxyStage = 'opening' | 'captcha' | 'submit' | 'result';
+export interface SessionMeasurement {
+  appleMs: number;
+  limited: boolean;
+  stage: ProxyStage;
+  stages: ProxyStage[];
+  outcome: string;
 }
 export interface SolverBalance {
   balance: number | null;

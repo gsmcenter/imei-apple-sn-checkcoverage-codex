@@ -254,6 +254,9 @@ export function batchCsv(detail: BatchDetail): string {
       'ID sprawdzenia',
       'Zlecono',
       'Zakończono',
+      'Apple ms (ostatnia próba)',
+      'Sesje (ostatnia próba)',
+      'Limity (ostatnia próba)',
     ],
   ];
   for (const i of detail.items) {
@@ -278,6 +281,9 @@ export function batchCsv(detail: BatchDetail): string {
       c?.id,
       c?.createdAt,
       c?.finishedAt,
+      r?.appleMs,
+      r?.sessions,
+      r?.rateLimits,
     ]);
   }
   return '\uFEFF' + rows.map((r) => r.map(cell).join(';')).join('\r\n');

@@ -30,6 +30,19 @@ export interface Check {
   finishedAt: string | null;
   runs?: import('./system.js').Run[];
   diagnostics?: import('./system.js').Diagnostic[];
+  proxySessions?: {
+    id: string;
+    proxy: string;
+    startedAt: string;
+    finishedAt: string | null;
+    appleMs: number | null;
+    limited: boolean;
+    stage: string | null;
+    concurrency: number;
+    queued: number;
+    exitIp: string | null;
+    outcome: string;
+  }[];
 }
 
 export interface Overview {

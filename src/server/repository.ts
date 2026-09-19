@@ -1,8 +1,6 @@
 import type { SolverId } from '../shared/system.js';
 import { randomUUID, randomInt } from 'node:crypto';
 import {
-  proxyHosts,
-  proxyModes,
   solverIds,
   type SystemSettings,
   type Run,
@@ -14,8 +12,11 @@ import type { Check, CoverageResult, Overview, Stage } from '../shared/types.js'
 import { solverConfigured, type Config } from './config.js';
 import type { Database, Sql } from './database.js';
 import { AppError, errors, type ErrorCode } from './errors.js';
+import { proxyChoices, redactProxySecrets } from './proxies.js';
+import { proxyStatistics } from './proxy-statistics.js';
 
 type Row = {
+  selected_proxy: string | null;
   id: string;
   serial: string;
   status: Check['status'];
@@ -95,7 +96,22 @@ export class Repository {
   }
   async get(id: string): Promise<Check | null> {
     const row = (await this.db.query<Row>('SELECT * FROM checks WHERE id=$1', [id])).rows[0];
-    return row ? { ...publicCheck(row), diagnostics: row.diagnostics ?? [] } : null;
+    if (!row) return null;
+    const sessions = (
+      await this.db.query<NonNullable<Check['proxySessions']>[number]>(
+        `SELECT id,proxy,started_at AS "startedAt",finished_at AS "finishedAt",apple_ms AS "appleMs",limited,limit_stage AS stage,concurrency,queued,exit_ip AS "exitIp",outcome FROM apple_sessions WHERE check_id=$1 ORDER BY started_at`,
+        [id],
+      )
+    ).rows;
+    return {
+      ...publicCheck(row),
+      diagnostics: row.diagnostics ?? [],
+      proxySessions: sessions.map((s) => ({
+        ...s,
+        startedAt: iso(s.startedAt),
+        finishedAt: s.finishedAt ? iso(s.finishedAt) : null,
+      })),
+    };
   }
   async list(search: string, status: string, page: number) {
     const values: unknown[] = [];
@@ -144,11 +160,7 @@ export class Repository {
       captchaDailyLimit: this.config.MAX_CAPTCHAS_PER_DAY,
       integrations: {
         captcha: solverConfigured(this.config, (await this.settings()).solverId),
-        proxy: !!(
-          this.config.PROXY_SERVER &&
-          this.config.PROXY_USERNAME &&
-          this.config.PROXY_PASSWORD
-        ),
+        proxy: proxyChoices(this.config).length > 0,
         worker: await this.workerOnline(),
       },
       demo,
@@ -215,6 +227,10 @@ export class Repository {
           "UPDATE captcha_measurements SET outcome='interrupted' WHERE check_id=$1 AND token=$2 AND outcome='running'",
           [row.id, row.lease_token],
         );
+        await sql.query(
+          "UPDATE apple_sessions SET outcome='interrupted',finished_at=now() WHERE check_id=$1 AND token=$2 AND outcome='running'",
+          [row.id, row.lease_token],
+        );
       }
     });
   }
@@ -224,6 +240,7 @@ export class Repository {
     token: string;
     proxy: string;
     solver: SolverId;
+    priorRateLimits: number;
   } | null> {
     return this.db.transaction(async (sql) => {
       await sql.query('SELECT pg_advisory_xact_lock(710433)');
@@ -254,10 +271,13 @@ export class Repository {
       ).rows[0];
       if (!row) return null;
       const settings = await this.settings(sql);
+      const choices = proxyChoices(this.config, true);
       const proxy =
-        settings.proxyMode === 'random'
-          ? proxyHosts[randomInt(proxyHosts.length)]
-          : settings.proxyMode;
+        row.selected_proxy ??
+        row.runs[0]?.proxy ??
+        (settings.proxyMode === 'random'
+          ? choices[randomInt(choices.length)].label
+          : settings.proxyMode);
       const run: Run = {
         token,
         attempt: row.attempts,
@@ -271,12 +291,26 @@ export class Repository {
         captchaMs: 0,
         captchaCalls: 0,
       };
-      await sql.query('UPDATE checks SET runs=runs || $2::jsonb WHERE id=$1', [
+      await sql.query('UPDATE checks SET runs=runs || $2::jsonb,selected_proxy=$3 WHERE id=$1', [
         row.id,
         JSON.stringify([run]),
+        proxy,
       ]);
       await sql.query('UPDATE queue_state SET last_started=now() WHERE id=1');
-      return { id: row.id, serial: row.serial, token, proxy, solver: settings.solverId };
+      const priorLimits = (
+        await sql.query<{ count: string }>(
+          'SELECT count(*) AS count FROM apple_sessions WHERE check_id=$1 AND limited',
+          [row.id],
+        )
+      ).rows[0];
+      return {
+        id: row.id,
+        serial: row.serial,
+        token,
+        proxy,
+        solver: settings.solverId,
+        priorRateLimits: Number(priorLimits.count),
+      };
     });
   }
   async renew(id: string, token: string) {
@@ -318,6 +352,15 @@ export class Repository {
         ).rows[0];
         run.captchaMs = Number(m.ms);
         run.captchaCalls = Number(m.calls);
+        const s = (
+          await sql.query<{ ms: string; sessions: string; limits: string }>(
+            'SELECT coalesce(sum(apple_ms),0) AS ms,count(*) AS sessions,count(*) FILTER(WHERE limited) AS limits FROM apple_sessions WHERE token=$1',
+            [token],
+          )
+        ).rows[0];
+        run.appleMs = Number(s.ms);
+        run.sessions = Number(s.sessions);
+        run.rateLimits = Number(s.limits);
       }
       await sql.query(
         `UPDATE checks SET status=$3, stage='done', result=$4::jsonb,error_code=$5,
@@ -337,7 +380,9 @@ export class Repository {
   }
   async settings(sql: Sql = this.db): Promise<SystemSettings> {
     const configured = this.config.PROXY_SERVER ? new URL(this.config.PROXY_SERVER).host : '';
-    const initial = proxyHosts.find((h) => h === configured) ?? proxyHosts[2];
+    const choices = proxyChoices(this.config, true);
+    const initial =
+      choices.find((x) => x.label === configured)?.label ?? choices[0]?.label ?? 'random';
     await sql.query(
       'INSERT INTO system_settings(id,proxy_mode,solver_id) VALUES(1,$1,$2) ON CONFLICT DO NOTHING',
       [
@@ -350,11 +395,29 @@ export class Repository {
         'SELECT proxy_mode,solver_id FROM system_settings WHERE id=1',
       )
     ).rows[0];
-    return { proxyMode: row.proxy_mode, solverId: row.solver_id };
+    const proxyMode =
+      choices.some((x) => x.label === row.proxy_mode) ||
+      (row.proxy_mode === 'random' && choices.length >= 2)
+        ? row.proxy_mode
+        : initial;
+    const solverId = solverIds.includes(row.solver_id) ? row.solver_id : '2captcha';
+    if (proxyMode !== row.proxy_mode || solverId !== row.solver_id)
+      await sql.query('UPDATE system_settings SET proxy_mode=$1,solver_id=$2 WHERE id=1', [
+        proxyMode,
+        solverId,
+      ]);
+    return { proxyMode, solverId };
   }
   async saveSettings(settings: SystemSettings) {
-    if (!proxyModes.includes(settings.proxyMode) || !solverIds.includes(settings.solverId))
-      throw new Error('Unsupported integration');
+    const choices = proxyChoices(this.config, true);
+    if (
+      !(
+        choices.some((x) => x.label === settings.proxyMode) ||
+        (settings.proxyMode === 'random' && choices.length >= 2)
+      ) ||
+      !solverIds.includes(settings.solverId)
+    )
+      throw Object.assign(new Error('Unsupported integration'), { statusCode: 400 });
     await this.settings();
     await this.db.query(
       'UPDATE system_settings SET proxy_mode=$1,solver_id=$2,updated_at=now() WHERE id=1',
@@ -363,7 +426,7 @@ export class Repository {
     return settings;
   }
   async diagnostic(id: string, token: string, step: string, message: string) {
-    let safe = message;
+    let safe = redactProxySecrets(message, this.config);
     for (const secret of [
       this.config.TWOCAPTCHA_API_KEY,
       this.config.CAPTCHAAI_API_KEY,
@@ -406,6 +469,7 @@ export class Repository {
     );
   }
   async system(demo = false): Promise<SystemStatus> {
+    const proxyStats = await proxyStatistics(this.db);
     const aggregate = (
       await this.db.query<{
         samples: string;
@@ -460,6 +524,8 @@ export class Repository {
       )
     ).rows[0];
     return {
+      ...proxyStats,
+      proxyOptions: proxyChoices(this.config, demo),
       settings: await this.settings(),
       proxies: rows.map(map),
       solvers: solverIds.map((name) => {
@@ -508,6 +574,29 @@ export class Repository {
       [this.config.MAX_CAPTCHAS_PER_DAY],
     );
     if (!r.rows.length) throw new AppError('CAPTCHA_LIMIT', 429);
+  }
+  async beginSession(id: string, token: string, proxy: string) {
+    const sid = randomUUID();
+    const r = await this.db.query(
+      `INSERT INTO apple_sessions(id,check_id,token,proxy,concurrency,queued)
+      SELECT $3,id,$2,$4,(SELECT count(*)::int FROM checks WHERE status='running'),(SELECT count(*)::int FROM checks WHERE status='queued')
+      FROM checks WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now() RETURNING id`,
+      [id, token, sid, proxy],
+    );
+    if (!r.rows.length) throw new AppError('WORKER_INTERRUPTED');
+    return sid;
+  }
+  async endSession(
+    id: string,
+    token: string,
+    sid: string,
+    m: import('../shared/system.js').SessionMeasurement,
+  ) {
+    await this.db.query(
+      `UPDATE apple_sessions SET finished_at=clock_timestamp(),apple_ms=$4,limited=$5,limit_stage=$6,stages=$7,outcome=$8
+      WHERE id=$3 AND token=$2 AND EXISTS(SELECT 1 FROM checks WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now())`,
+      [id, token, sid, m.appleMs, m.limited, m.limited ? m.stage : null, m.stages, m.outcome],
+    );
   }
   async rateLimit(key: string, max: number, seconds: number) {
     const r = (

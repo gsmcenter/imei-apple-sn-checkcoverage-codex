@@ -57,7 +57,13 @@ Wszystkie endpointy wymagają sesji; POST także poprawnego `Origin`. Utworzenie
 
 - `GET /api/v1/system`: ustawienia proxy/solvera, statystyki prób wg proxy i wywołań wg solvera, kolejka, aktywne workery, limity i parametry procesu WWW.
 - `GET /api/v1/system/balance`: `{ balance, currency: "USD", status, checkedAt }`. `status` to `ok`, `unavailable`, `not_configured` lub `demo`; brak odczytu daje `balance: null`. Cache do 60 s na proces.
-- `POST /api/v1/system/settings`: `{ "proxyMode": "random", "solverId": "2captcha" }`. `proxyMode` dopuszcza też `fr.proxymesh.com:31280`, `de.proxymesh.com:31280`, `open.proxymesh.com:31280`. `solverId` dopuszcza `2captcha` i `captchaai`; inne wartości zwracają 400. Wybór solvera bez klucza API daje 503. Wymagana sesja i prawidłowy Origin.
+- `POST /api/v1/system/settings`: `{ "proxyMode": "random", "solverId": "2captcha" }`. `proxyMode` dopuszcza etykiety z `proxyOptions` zwracanych przez `/api/v1/system`; `random` wymaga co najmniej dwóch wpisów. `solverId` dopuszcza `2captcha` i `captchaai`; inne wartości zwracają 400. Wybór solvera bez klucza API daje 503. Wymagana sesja i prawidłowy Origin.
+- `GET /api/health`: publiczny alias `/healthz`.
+- `POST /api/v1/proxies/test`: `{}` testuje wszystkie wpisy; `{ "label": "evomi-de" }` wybrany wpis. Wymaga sesji i Origin; limit 2 żądania/minutę, w demo niedostępne. Nie przyjmuje adresu URL. Wynik `{ testedAt, items }`; element zawiera `{ label, info, configured, bare, diagnosis }`. `info`: zamaskowany login, długości hasła, bezpieczna lista parametrów i ostrzeżenia. `configured`/`bare`: `ok`, `ms`, opcjonalne `status`, `reason`, `exitIp`.
+
+System dodaje `proxyOptions: { label, provider }[]`, `proxyPerformance` (sprawdzenia, sukcesy, błędy, średnia/mediana Apple, sesje, limity, błędy proxy) i `limits: { dimension, name, sessions, limited }[]`. Wymiary: `proxy`, `concurrency`, `stage`, `hour` (UTC). Brak IP nie oznacza błędu.
+
+`runs` dodaje opcjonalne `appleMs`, `sessions`, `rateLimits`. Szczegóły sprawdzenia dodają `proxySessions: { id, proxy, startedAt, finishedAt, appleMs, limited, stage, concurrency, queued, exitIp, outcome }[]`. Pomiar przerwanej sesji może być null. Proxy jest stałe przez całe sprawdzenie.
 
 Każdy `Check` zawiera `runs`: osobne próby z rzeczywistym proxy i identyfikatorem solvera, statusami, czasami (ms) i liczbą wywołań CAPTCHA. `durationMs: null` oznacza próbę w toku, przerwaną albo brak pomiaru, a nie zero. `queueMs` to czas od zlecenia do startu danej próby, więc przy ponowieniu obejmuje też poprzednią próbę. `solver` oznacza przypisany adapter; `captchaCalls` informuje, czy faktycznie rozpoczęto wywołanie.
 

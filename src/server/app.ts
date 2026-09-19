@@ -10,11 +10,13 @@ import { integrationsConfigured, solverConfigured } from './config.js';
 import { Repository } from './repository.js';
 import { AppError, normalizeSerial } from './errors.js';
 import { newToken, privateKey, verifyPassword } from './security.js';
-import { proxyModes, solverIds } from '../shared/system.js';
+import { solverIds } from '../shared/system.js';
 import { CaptchaClient } from './integrations/captcha.js';
 import { cachedBalance } from './balance.js';
 import { BatchRepository, batchCsv } from './batches.js';
 import { MAX_IMPORT_BYTES } from '../shared/batches.js';
+import { proxyCatalog } from './proxies.js';
+import { testProxy } from './proxy-probe.js';
 
 const idSchema = z.string().uuid();
 export async function createApp(
@@ -78,6 +80,7 @@ export async function createApp(
         return reply.code(403).send({ error: 'Niedozwolone żądanie.' });
     }
     const publicRoute =
+      (req.method === 'GET' && req.url === '/api/health') ||
       (req.method === 'GET' && req.url === '/api/session') ||
       (req.method === 'POST' && req.url === '/api/login');
     if (!publicRoute && !(await authenticated(req.cookies[cookieName])))
@@ -106,6 +109,16 @@ export async function createApp(
     });
   });
   app.get('/healthz', async (_, reply) => {
+    try {
+      await repo.db.query('SELECT 1');
+      if (options.workerHealthy && !options.workerHealthy())
+        return reply.code(503).send({ status: 'unavailable' });
+      return { status: 'ok' };
+    } catch {
+      return reply.code(503).send({ status: 'unavailable' });
+    }
+  });
+  app.get('/api/health', async (_, reply) => {
     try {
       await repo.db.query('SELECT 1');
       if (options.workerHealthy && !options.workerHealthy())
@@ -163,7 +176,7 @@ export async function createApp(
   app.post('/api/v1/system/settings', async (req) => {
     const settings = z
       .object({
-        proxyMode: z.enum(proxyModes),
+        proxyMode: z.string().min(1).max(60),
         solverId: z.enum(solverIds),
       })
       .strict()
@@ -171,6 +184,24 @@ export async function createApp(
     if (!options.demo && !solverConfigured(config, settings.solverId))
       throw new AppError('NOT_CONFIGURED', 503);
     return repo.saveSettings(settings);
+  });
+  app.post('/api/v1/proxies/test', async (req, reply) => {
+    const { label } = z
+      .object({ label: z.string().min(1).max(60).optional() })
+      .strict()
+      .parse(req.body ?? {});
+    if (options.demo)
+      return reply.code(400).send({ error: 'Tryb demo nie wykonuje połączeń z dostawcami proxy.' });
+    const catalog = proxyCatalog(config),
+      selected = label ? catalog.filter((p) => p.label === label) : catalog;
+    if (!selected.length)
+      return reply.code(400).send({ error: 'Brak takiego proxy w konfiguracji.' });
+    if (!(await repo.rateLimit('proxy:test', 2, 60)))
+      return reply.code(429).send({ error: 'Test proxy można uruchomić dwa razy na minutę.' });
+    return {
+      testedAt: new Date().toISOString(),
+      items: await Promise.all(selected.map(testProxy)),
+    };
   });
   app.get('/api/v1/checks', async (req) => {
     const q = z

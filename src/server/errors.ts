@@ -1,4 +1,10 @@
 export const errors = {
+  APPLE_RATE_LIMITED:
+    'Apple wyświetliło planszę ograniczenia dostępu. Wyczerpano ponowienia z nowymi sesjami proxy.',
+  PROXY_REMOVED:
+    'Proxy przypisane do tego sprawdzenia nie jest już skonfigurowane. Przywróć konfigurację lub utwórz nowe sprawdzenie.',
+  PROXY_AUTH:
+    'Proxy odrzuciło uwierzytelnienie (407). Testuj proxy w Stanie systemu: możliwa literówka, reset klucza, nieaktywny plan, brak transferu lub niedozwolone IP.',
   INVALID_SERIAL:
     'Podaj prawidłowy numer seryjny: 8–12 liter lub cyfr. IMEI nie jest obsługiwany w tej wersji.',
   SERIAL_NOT_FOUND: 'Apple nie rozpoznało numeru seryjnego. Sprawdź numer i spróbuj ponownie.',
@@ -31,7 +37,8 @@ export function browserErrorCode(error: unknown, aborted = false): ErrorCode {
   if (aborted) return 'CHECK_TIMEOUT';
   if (error instanceof AppError) return error.code;
   const message = error instanceof Error ? error.message : '';
-  if (/PROXY|TUNNEL|407|ERR_CONNECTION|ERR_NAME_NOT_RESOLVED/i.test(message)) return 'PROXY_ERROR';
+  if (/407|ERR_INVALID_AUTH_CREDENTIALS|ERR_PROXY_AUTH/i.test(message)) return 'PROXY_AUTH';
+  if (/PROXY|TUNNEL|ERR_CONNECTION|ERR_NAME_NOT_RESOLVED/i.test(message)) return 'PROXY_ERROR';
   if (/Timeout|TIMED_OUT/i.test(message)) return 'CHECK_TIMEOUT';
   return 'PAGE_CHANGED';
 }

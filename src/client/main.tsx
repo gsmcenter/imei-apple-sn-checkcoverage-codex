@@ -322,10 +322,44 @@ function Detail({
                   {duration(run.captchaMs)} · {run.captchaCalls}
                 </dd>
               </div>
+              {run.sessions != null && (
+                <>
+                  <div>
+                    <dt>Sesje / trafienia limitu</dt>
+                    <dd>
+                      {run.sessions} / {run.rateLimits ?? 0}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Czas obsługi Apple (bez solvera)</dt>
+                    <dd>{duration(run.appleMs)}</dd>
+                  </div>
+                </>
+              )}
             </dl>
           </div>
         ))}
       </section>
+      {!!check.proxySessions?.length && (
+        <details className="raw-result">
+          <summary>Sesje proxy i limity ({check.proxySessions.length})</summary>
+          {check.proxySessions.map((s) => (
+            <div className="run-card" key={s.id}>
+              <strong>
+                {s.proxy} · {date(s.startedAt)}
+              </strong>
+              <p>
+                {s.limited ? `Limit na etapie: ${s.stage}` : s.outcome} · Apple:{' '}
+                {duration(s.appleMs)}
+              </p>
+              <p>
+                Równoległe sprawdzenia: {s.concurrency} · Kolejka: {s.queued} · IP:{' '}
+                {s.exitIp ?? 'nieznane'}
+              </p>
+            </div>
+          ))}
+        </details>
+      )}
       <details className="raw-result diagnostic-log" open={check.status === 'failed'}>
         <summary>Dziennik diagnostyczny {check.errorCode ? `· ${check.errorCode}` : ''}</summary>
         {!check.diagnostics?.length ? (
@@ -759,7 +793,7 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
                   </div>
                   <div className="connection-row">
                     <span>
-                      ProxyMesh<small>Połączenie ze stroną Apple</small>
+                      Proxy<small>Połączenie ze stroną Apple</small>
                     </span>
                     <span
                       className={
