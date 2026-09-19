@@ -81,6 +81,16 @@ Bez `TEST_DATABASE_URL` testy używają PGlite. Test rzeczywistej współbieżno
 - [Playwright — konfiguracja proxy](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-proxy)
 - [Railway — Dockerfile](https://docs.railway.com/builds/dockerfiles)
 
+## Sprawdzenia hurtowe — paczki SN
+
+Menu **Paczki SN** pozwala tworzyć nazwane paczki z notatką, wkleić SN lub wczytać plik UTF-8 TXT / CSV / TSV z jedną kolumną. Maksymalnie 5000 unikalnych SN w paczce i 250 KB pliku; opcjonalny nagłówek `SN`, `SERIAL` lub `SERIAL_NUMBER`. Obsługiwane separatory to białe znaki, przecinek i średnik. Podgląd importu pokazuje duplikaty oraz niepoprawne wpisy. Błędne wpisy są pomijane wyłącznie po zaznaczeniu odpowiedniej opcji. IMEI nadal nie jest obsługiwany.
+
+Paczki i pozycje są zapisane w PostgreSQL. Worker stopniowo dodaje pozycje do dotychczasowej kolejki z zachowaniem `MAX_PENDING_CHECKS`, `MAX_CHECKS_PER_DAY`, limitu CAPTCHA, odstępów startów i współbieżności. Limit 50 000 pozycji oczekujących we wszystkich paczkach ogranicza backlog. Dzienny limit odblokowuje się po północy UTC; restart lub zamknięcie panelu nie usuwa paczek. Brak konfiguracji solvera wstrzymuje uruchamianie pracy, a osiągnięcie limitu CAPTCHA wstrzymuje start nowych sprawdzeń.
+
+Wstrzymanie / wznowienie oraz anulowanie dotyczą **tylko pozycji niewysłanych do kolejki**. Już zakolejkowane i trwające zadania dokończą pracę, także jeśli są współdzielone przez inne paczki. Anulowana paczka zachowuje historię. Nie ma automatycznych ponowień błędów Apple/solvera: przycisk „Ponów błędy” tworzy nową paczkę z aktualnie nieudanymi SN i odnośnikiem do źródła. Zakończone wcześniej sprawdzenia nie zastępują nowych; aktywne sprawdzenie tego samego SN może być współdzielone, bez kolejnego płatnego zadania.
+
+Widok paczki ma postęp, liczniki, wyszukiwanie SN, filtry, stronicowanie, zmianę nazwy/notatki oraz szczegóły z logami i pomiarami. Eksport CSV pobiera **wszystkie pozycje zgodne z bieżącym filtrem**, nie tylko widoczną stronę; zawiera wyniki, błędy, daty, proxy, solver i czasy ostatniej próby. UTF-8 z BOM, separator średnik, ochrona komórek przed formułami. Proxy i solver są pobierane ze Stanu systemu przy starcie każdej próby i zapisywane w jej historii. Nowe tabele dodaje automatyczna migracja; nie potrzeba nowych zmiennych Railway.
+
 ## Stan systemu i pomiary
 
 Panel „Stan systemu” pozwala zapisać wspólne dla workerów proxy: `fr.proxymesh.com:31280`, `de.proxymesh.com:31280`, `open.proxymesh.com:31280` lub `random`. Losowanie jest niezależne dla każdej rozpoczynanej próby (także wznowienia po restarcie). Rozpoczęta próba zachowuje wybrane proxy i solver. Dane dostępowe ProxyMesh pozostają w zmiennych środowiskowych i muszą pozwalać na korzystanie z wybranego serwera.

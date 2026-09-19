@@ -19,7 +19,9 @@ after(async () => {
   await ctx?.db.close();
 });
 beforeEach(async () => {
-  await ctx.db.query('TRUNCATE captcha_measurements,system_settings,rate_limits,checks');
+  await ctx.db.query(
+    'TRUNCATE batch_items,batches,captcha_measurements,system_settings,rate_limits,checks',
+  );
   const res = await app.inject({
     method: 'POST',
     url: '/api/login',

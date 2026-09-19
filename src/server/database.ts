@@ -73,6 +73,21 @@ CREATE TABLE IF NOT EXISTS captcha_measurements (
  duration_ms DOUBLE PRECISION, outcome TEXT NOT NULL DEFAULT 'running'
 );
 CREATE INDEX IF NOT EXISTS captcha_measurements_check ON captcha_measurements(check_id);
+CREATE TABLE IF NOT EXISTS batches (
+ id UUID PRIMARY KEY, name TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+ state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','paused','cancelled')),
+ idempotency_key UUID NOT NULL UNIQUE, request_hash TEXT NOT NULL,
+ source_id UUID REFERENCES batches(id), duplicates INTEGER NOT NULL DEFAULT 0, invalid INTEGER NOT NULL DEFAULT 0,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_dispatched TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS batch_items (
+ batch_id UUID NOT NULL REFERENCES batches(id), position INTEGER NOT NULL, serial TEXT NOT NULL,
+ check_id UUID REFERENCES checks(id), cancelled BOOLEAN NOT NULL DEFAULT false,
+ PRIMARY KEY(batch_id,position), UNIQUE(batch_id,serial)
+);
+CREATE INDEX IF NOT EXISTS batch_items_waiting ON batch_items(batch_id,position) WHERE check_id IS NULL AND NOT cancelled;
+CREATE INDEX IF NOT EXISTS batch_items_check ON batch_items(check_id);
+CREATE INDEX IF NOT EXISTS batches_history ON batches(created_at DESC,id DESC);
 `;
 
 export async function migrate(db: Database): Promise<void> {

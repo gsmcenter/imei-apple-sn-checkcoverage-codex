@@ -14,7 +14,7 @@ before(async () => {
 after(async () => db?.close());
 beforeEach(async () => {
   await db.query(
-    'TRUNCATE captcha_measurements,system_settings,checks,captcha_usage; UPDATE queue_state SET last_started=NULL',
+    'TRUNCATE batch_items,batches,captcha_measurements,system_settings,checks,captcha_usage; UPDATE queue_state SET last_started=NULL',
   );
   repo.config.MAX_CHECKS_PER_DAY = 1500;
   repo.config.MAX_CAPTCHAS_PER_DAY = 3000;

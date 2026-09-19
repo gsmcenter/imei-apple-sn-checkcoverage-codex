@@ -51,42 +51,47 @@ export class Repository {
   ) {}
 
   async enqueue(serial: string, key: string): Promise<{ check: Check; reused: boolean }> {
-    return this.db.transaction(async (sql) => {
-      // A short database lock makes global quotas and duplicate prevention atomic across web replicas.
-      await sql.query('SELECT pg_advisory_xact_lock(710432)');
-      const prior = (await sql.query<Row>('SELECT * FROM checks WHERE idempotency_key=$1', [key]))
-        .rows[0];
-      if (prior) {
-        if (prior.serial !== serial)
-          throw Object.assign(new Error('Ten klucz żądania został już użyty dla innego SN.'), {
-            statusCode: 409,
-          });
-        return { check: publicCheck(prior), reused: true };
-      }
-      const active = (
-        await sql.query<Row>(
-          "SELECT * FROM checks WHERE serial=$1 AND status IN ('queued','running')",
-          [serial],
-        )
-      ).rows[0];
-      if (active) return { check: publicCheck(active), reused: true };
-      const counts = (
-        await sql.query<{ today: string; pending: string }>(`SELECT
+    return this.db.transaction((sql) => this.enqueueIn(sql, serial, key));
+  }
+  async enqueueIn(
+    sql: Sql,
+    serial: string,
+    key: string,
+  ): Promise<{ check: Check; reused: boolean }> {
+    // A short database lock makes global quotas and duplicate prevention atomic across web replicas.
+    await sql.query('SELECT pg_advisory_xact_lock(710432)');
+    const prior = (await sql.query<Row>('SELECT * FROM checks WHERE idempotency_key=$1', [key]))
+      .rows[0];
+    if (prior) {
+      if (prior.serial !== serial)
+        throw Object.assign(new Error('Ten klucz żądania został już użyty dla innego SN.'), {
+          statusCode: 409,
+        });
+      return { check: publicCheck(prior), reused: true };
+    }
+    const active = (
+      await sql.query<Row>(
+        "SELECT * FROM checks WHERE serial=$1 AND status IN ('queued','running')",
+        [serial],
+      )
+    ).rows[0];
+    if (active) return { check: publicCheck(active), reused: true };
+    const counts = (
+      await sql.query<{ today: string; pending: string }>(`SELECT
         count(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS today,
         count(*) FILTER (WHERE status IN ('queued','running')) AS pending FROM checks`)
-      ).rows[0];
-      if (Number(counts.today) >= this.config.MAX_CHECKS_PER_DAY)
-        throw new AppError('DAILY_LIMIT', 429);
-      if (Number(counts.pending) >= this.config.MAX_PENDING_CHECKS)
-        throw new AppError('QUEUE_FULL', 429);
-      const row = (
-        await sql.query<Row>(
-          'INSERT INTO checks(id,serial,idempotency_key) VALUES($1,$2,$3) RETURNING *',
-          [randomUUID(), serial, key],
-        )
-      ).rows[0];
-      return { check: publicCheck(row), reused: false };
-    });
+    ).rows[0];
+    if (Number(counts.today) >= this.config.MAX_CHECKS_PER_DAY)
+      throw new AppError('DAILY_LIMIT', 429);
+    if (Number(counts.pending) >= this.config.MAX_PENDING_CHECKS)
+      throw new AppError('QUEUE_FULL', 429);
+    const row = (
+      await sql.query<Row>(
+        'INSERT INTO checks(id,serial,idempotency_key) VALUES($1,$2,$3) RETURNING *',
+        [randomUUID(), serial, key],
+      )
+    ).rows[0];
+    return { check: publicCheck(row), reused: false };
   }
   async get(id: string): Promise<Check | null> {
     const row = (await this.db.query<Row>('SELECT * FROM checks WHERE id=$1', [id])).rows[0];
@@ -228,6 +233,11 @@ export class Repository {
         )
       ).rows[0];
       if (Number(active.count) >= this.config.WORKER_CONCURRENCY) return null;
+      const quota = await sql.query(
+        "SELECT day FROM captcha_usage WHERE day=(now() AT TIME ZONE 'UTC')::date AND count >= $1",
+        [this.config.MAX_CAPTCHAS_PER_DAY],
+      );
+      if (quota.rows.length) return null;
       const throttle = await sql.query(
         "SELECT id FROM queue_state WHERE last_started IS NULL OR last_started < now()-($1::double precision*interval '1 millisecond')",
         [this.config.MIN_CHECK_INTERVAL_MS],

@@ -4,8 +4,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { CoverageProvider } from './integrations/apple.js';
 import { Repository } from './repository.js';
 import { AppError } from './errors.js';
+import { BatchRepository } from './batches.js';
+import { integrationsConfigured, solverConfigured } from './config.js';
 
-export function startWorker(repo: Repository, provider: CoverageProvider) {
+export function startWorker(repo: Repository, provider: CoverageProvider, demo = false) {
+  const batches = new BatchRepository(repo);
   const id = randomUUID();
   const stop = new AbortController();
   const active = new Set<Promise<void>>();
@@ -96,7 +99,12 @@ export function startWorker(repo: Repository, provider: CoverageProvider) {
           lastHousekeeping = Date.now();
         }
         if (active.size < repo.config.WORKER_CONCURRENCY) {
-          const job = await repo.claim();
+          const configured =
+            demo ||
+            (integrationsConfigured(repo.config) &&
+              solverConfigured(repo.config, (await repo.settings()).solverId));
+          if (configured) await batches.dispatch();
+          const job = configured ? await repo.claim() : null;
           if (job) {
             const task = processJob(job).catch(() => {
               console.error('Worker could not persist a result; lease recovery will handle it.');

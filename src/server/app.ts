@@ -13,6 +13,8 @@ import { newToken, privateKey, verifyPassword } from './security.js';
 import { proxyModes, solverIds } from '../shared/system.js';
 import { CaptchaClient } from './integrations/captcha.js';
 import { cachedBalance } from './balance.js';
+import { BatchRepository, batchCsv } from './batches.js';
+import { MAX_IMPORT_BYTES } from '../shared/batches.js';
 
 const idSchema = z.string().uuid();
 export async function createApp(
@@ -86,6 +88,8 @@ export async function createApp(
       return reply.code(error.status).send({ error: error.message, code: error.code });
     if (error instanceof ZodError)
       return reply.code(400).send({ error: 'Niepoprawne dane żądania.' });
+    if (error instanceof Error && 'publicMessage' in error && 'statusCode' in error)
+      return reply.code(Number(error.statusCode)).send({ error: error.publicMessage });
     const candidate =
       error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : 500;
     const status =
@@ -181,6 +185,79 @@ export async function createApp(
       })
       .parse(req.query);
     return repo.list(q.search.toUpperCase(), q.status, q.page);
+  });
+  const batches = new BatchRepository(repo);
+  const batchInput = z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      notes: z.string().trim().max(2000).default(''),
+      text: z.string().max(MAX_IMPORT_BYTES).default(''),
+      ignoreInvalid: z.boolean().default(false),
+      paused: z.boolean().default(false),
+    })
+    .strict();
+  const batchQuery = z.object({
+    search: z
+      .string()
+      .regex(/^[A-Za-z0-9]*$/)
+      .max(12)
+      .default(''),
+    status: z
+      .enum(['', 'waiting', 'queued', 'running', 'completed', 'failed', 'cancelled'])
+      .default(''),
+    page: z.coerce.number().int().min(1).max(100000).default(1),
+  });
+  app.get('/api/v1/batches', async (req) => {
+    const q = z
+      .object({
+        search: z.string().max(120).default(''),
+        page: z.coerce.number().int().min(1).max(100000).default(1),
+      })
+      .parse(req.query);
+    return batches.list(q.search, q.page);
+  });
+  app.post('/api/v1/batches', { bodyLimit: MAX_IMPORT_BYTES * 2 }, async (req, reply) => {
+    const input = batchInput.parse(req.body),
+      key = idSchema.parse(req.headers['idempotency-key']);
+    if (!(await repo.rateLimit('batches:submit', 10, 60)))
+      return reply.code(429).send({ error: 'Poczekaj minutę przed dodaniem kolejnej paczki.' });
+    const result = await batches.create(input, key);
+    return reply.code(result.reused ? 200 : 202).send(result);
+  });
+  app.get('/api/v1/batches/:id', async (req) => {
+    const { id } = z.object({ id: idSchema }).parse(req.params),
+      q = batchQuery.parse(req.query);
+    return batches.detail(id, q.search.toUpperCase(), q.status, q.page);
+  });
+  app.get('/api/v1/batches/:id/export.csv', async (req, reply) => {
+    const { id } = z.object({ id: idSchema }).parse(req.params),
+      q = batchQuery.parse(req.query);
+    const detail = await batches.detail(id, q.search.toUpperCase(), q.status, 1, true);
+    return reply
+      .type('text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="batch-${id}.csv"`)
+      .send(batchCsv(detail));
+  });
+  app.post('/api/v1/batches/:id', async (req) => {
+    const { id } = z.object({ id: idSchema }).parse(req.params);
+    const patch = z
+      .object({
+        name: z.string().trim().min(1).max(120).optional(),
+        notes: z.string().trim().max(2000).optional(),
+        state: z.enum(['active', 'paused', 'cancelled']).optional(),
+      })
+      .strict()
+      .parse(req.body);
+    return batches.update(id, patch);
+  });
+  app.post('/api/v1/batches/:id/retry', async (req, reply) => {
+    const { id } = z.object({ id: idSchema }).parse(req.params);
+    const input = batchInput.omit({ text: true, ignoreInvalid: true }).parse(req.body),
+      key = idSchema.parse(req.headers['idempotency-key']);
+    if (!(await repo.rateLimit('batches:submit', 10, 60)))
+      return reply.code(429).send({ error: 'Poczekaj minutę przed dodaniem kolejnej paczki.' });
+    const result = await batches.create({ ...input, text: '', ignoreInvalid: false }, key, id);
+    return reply.code(result.reused ? 200 : 202).send(result);
   });
   app.get('/api/v1/checks/:id', async (req, reply) => {
     const { id } = z.object({ id: idSchema }).parse(req.params);

@@ -12,6 +12,7 @@ import {
   Clock3,
   ExternalLink,
   History,
+  Folders,
   LayoutDashboard,
   LoaderCircle,
   LockKeyhole,
@@ -28,6 +29,7 @@ import { stageLabels } from '../shared/types';
 import './styles.css';
 import { api, post, HttpError } from './api';
 import { SystemPanel } from './system-panel';
+import { BatchPanel } from './batch-panel';
 import { duration } from '../shared/system';
 
 const date = (value: string) =>
@@ -366,7 +368,13 @@ function Detail({
 }
 
 function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
-  const [view, setView] = useState<'overview' | 'history' | 'system'>('overview');
+  const [view, setView] = useState<'overview' | 'history' | 'system' | 'batches'>(() =>
+    location.hash.startsWith('#batches') ? 'batches' : 'overview',
+  );
+  useEffect(() => {
+    if (view !== 'batches' && location.hash.startsWith('#batches'))
+      history.replaceState(null, '', location.pathname);
+  }, [view]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [items, setItems] = useState<Check[]>([]);
   const [total, setTotal] = useState(0);
@@ -504,6 +512,13 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
             <span className="nav-count">{overview ? number(overview.total) : '—'}</span>
           </button>
           <button
+            className={view === 'batches' ? 'nav-item selected' : 'nav-item'}
+            onClick={() => setView('batches')}
+          >
+            <Folders size={19} />
+            Paczki SN
+          </button>
+          <button
             className={view === 'system' ? 'nav-item selected' : 'nav-item'}
             onClick={() => setView('system')}
           >
@@ -537,7 +552,13 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
           <span>
             Panel urządzeń<span className="breadcrumb-slash">/</span>
             <strong>
-              {view === 'system' ? 'Stan systemu' : view === 'overview' ? 'Przegląd' : 'Historia'}
+              {view === 'batches'
+                ? 'Paczki SN'
+                : view === 'system'
+                  ? 'Stan systemu'
+                  : view === 'overview'
+                    ? 'Przegląd'
+                    : 'Historia'}
             </strong>
           </span>
           <span className="topbar-private">
@@ -557,18 +578,22 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
             <div>
               <span className="eyebrow">APPLE COVERAGE</span>
               <h1>
-                {view === 'system'
-                  ? 'Stan systemu.'
-                  : view === 'overview'
-                    ? 'Sprawdź gwarancję.'
-                    : 'Historia sprawdzeń.'}
+                {view === 'batches'
+                  ? 'Sprawdzenia hurtowe.'
+                  : view === 'system'
+                    ? 'Stan systemu.'
+                    : view === 'overview'
+                      ? 'Sprawdź gwarancję.'
+                      : 'Historia sprawdzeń.'}
               </h1>
               <p>
-                {view === 'system'
-                  ? 'Integracje, wydajność i diagnostyka Twoich sprawdzeń.'
-                  : view === 'overview'
-                    ? 'Aktualny status ochrony Twoich urządzeń, w jednym miejscu.'
-                    : 'Wszystkie numery seryjne i zapisane odpowiedzi Apple.'}
+                {view === 'batches'
+                  ? 'Importuj numery, śledź postęp i pobieraj wyniki całych paczek.'
+                  : view === 'system'
+                    ? 'Integracje, wydajność i diagnostyka Twoich sprawdzeń.'
+                    : view === 'overview'
+                      ? 'Aktualny status ochrony Twoich urządzeń, w jednym miejscu.'
+                      : 'Wszystkie numery seryjne i zapisane odpowiedzi Apple.'}
               </p>
             </div>
             <div className="source-label">
@@ -775,7 +800,8 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
             </>
           )}
           {view === 'system' && <SystemPanel />}
-          {view !== 'system' && (
+          {view === 'batches' && <BatchPanel onCheck={setSelected} overview={overview} />}
+          {(view === 'overview' || view === 'history') && (
             <section className="history-card">
               <div className="history-heading">
                 <div>

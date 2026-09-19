@@ -48,17 +48,21 @@ for (let i = 0; i < 6; i++) {
     [randomUUID(), serial, JSON.stringify(sample(serial, i)), i + 1],
   );
 }
-const worker = startWorker(repo, {
-  async check(serial, signal, stage) {
-    await stage('opening');
-    await delay(1500, undefined, { signal });
-    await stage('solving');
-    await delay(2500, undefined, { signal });
-    await stage('reading');
-    await delay(1000, undefined, { signal });
-    return sample(serial, 0);
+const worker = startWorker(
+  repo,
+  {
+    async check(serial, signal, stage) {
+      await stage('opening');
+      await delay(1500, undefined, { signal });
+      await stage('solving');
+      await delay(2500, undefined, { signal });
+      await stage('reading');
+      await delay(1000, undefined, { signal });
+      return sample(serial, 0);
+    },
   },
-});
+  true,
+);
 const app = await createApp(config, repo, { demo: true });
 await app.listen({ host: '127.0.0.1', port });
 console.log(
