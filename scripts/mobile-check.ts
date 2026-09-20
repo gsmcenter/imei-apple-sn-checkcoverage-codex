@@ -108,7 +108,26 @@ try {
                 cls: el.className,
                 width: el.getBoundingClientRect().width,
               })),
+            textOverflow: [...document.querySelectorAll<HTMLElement>('body *')]
+              .filter(
+                (el) =>
+                  el.scrollWidth > el.clientWidth + 1 &&
+                  getComputedStyle(el).overflowX === 'visible' &&
+                  !el.closest('.table-scroll,.system-table-wrap'),
+              )
+              .map((el) => ({
+                tag: el.tagName,
+                cls: el.className,
+                client: el.clientWidth,
+                scroll: el.scrollWidth,
+                text: el.textContent?.slice(0, 120),
+              })),
           }));
+          if (size.doc > size.width + 1)
+            await page.screenshot({
+              path: `.local/mobile-check/${engine.name()}-${width}-${view}-overflow.png`,
+              fullPage: true,
+            });
           assert.ok(
             size.doc <= size.width + 1,
             `${engine.name()} ${width} ${view}: ${JSON.stringify(size)}`,

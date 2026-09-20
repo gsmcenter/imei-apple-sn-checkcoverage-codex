@@ -1525,6 +1525,7 @@ tbody tr:hover {
 }
 .system-settings label {
   display: grid;
+  min-width: 0;
   gap: 10px;
   color: #35455f;
   font-size: 14px;
@@ -1532,6 +1533,7 @@ tbody tr:hover {
 }
 .system-settings select {
   width: 100%;
+  min-width: 0;
   padding: 14px;
   border: 1px solid #dbe3ef;
   border-radius: 8px;
@@ -1548,6 +1550,8 @@ tbody tr:hover {
 }
 .system-table-wrap {
   overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 .system-table {
   width: 100%;
@@ -1641,6 +1645,7 @@ tbody tr:hover {
   }
   .system-card {
     padding: 18px;
+    overflow-wrap: anywhere;
   }
   .system-toolbar {
     align-items: flex-start;
