@@ -179,6 +179,8 @@ code {
 }
 .app-shell {
   display: flex;
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
 }
 .sidebar {
@@ -289,6 +291,7 @@ code {
   margin-left: auto;
 }
 .main-wrap {
+  min-width: 0;
   width: calc(100% - 240px);
   margin-left: 240px;
 }
@@ -326,6 +329,8 @@ code {
   display: none;
 }
 .dashboard {
+  min-width: 0;
+  width: 100%;
   max-width: 1500px;
   margin: auto;
   padding: 35px 40px 22px;
@@ -447,6 +452,8 @@ code {
 .new-check-card,
 .connections-card,
 .history-card {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 11px;
@@ -658,6 +665,8 @@ code {
   max-width: 190px;
 }
 .table-scroll {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 table {
@@ -1643,6 +1652,7 @@ tbody tr:hover {
 }
 .batch-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
 }
 .batch-actions {
@@ -1652,6 +1662,7 @@ tbody tr:hover {
   gap: 12px;
 }
 .batch-card {
+  min-width: 0;
   background: #fff;
   border: 1px solid #e3e9f2;
   border-radius: 14px;
@@ -1812,5 +1823,157 @@ tbody tr:hover {
   .batch-panel .table-footer {
     flex-wrap: wrap;
     gap: 15px;
+  }
+}
+
+/* Keep record lists inside the mobile viewport; wide comparison tables keep their own scroll. */
+@media (max-width: 700px) {
+  .history-heading {
+    flex-wrap: wrap;
+  }
+  .record-table,
+  .record-table tbody,
+  .record-table tr,
+  .record-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+  .record-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .record-table tbody {
+    padding: 0 16px 16px;
+  }
+  .record-table tr {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+    background: #fff;
+  }
+  .record-table tr:last-child {
+    margin-bottom: 0;
+  }
+  .record-table td {
+    border: 0;
+    padding: 0;
+    overflow-wrap: anywhere;
+  }
+  .record-table td + td {
+    margin-top: 12px;
+  }
+  .record-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-bottom: 5px;
+  }
+  .record-table .table-device > div {
+    min-width: 0;
+  }
+  .record-table .device-icon {
+    flex-shrink: 0;
+  }
+  .record-table .badge {
+    white-space: normal;
+  }
+  .record-table .record-action > button {
+    width: 100%;
+    min-height: 40px;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 9px 12px;
+    color: var(--blue);
+  }
+  .record-table .row-action span {
+    display: inline;
+  }
+  .batch-progress {
+    min-width: 0;
+  }
+  .table-footer {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .batch-panel .pagination {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .batch-panel .pagination .secondary {
+    padding: 10px 12px;
+  }
+  .result-fields > div {
+    flex-wrap: wrap;
+  }
+  .result-fields dd {
+    margin-left: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 560px) {
+  .sidebar {
+    gap: 8px;
+    padding: 14px 12px;
+  }
+  .sidebar nav {
+    gap: 2px;
+  }
+  .nav-item {
+    padding: 10px 8px;
+  }
+  .topbar {
+    gap: 8px;
+    padding: 10px 16px;
+    height: auto;
+    min-height: 56px;
+  }
+  .topbar > span:first-child {
+    min-width: 0;
+  }
+  .topbar-private {
+    display: none;
+  }
+  .mobile-logout {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+  }
+  .stats-grid,
+  .batch-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat-card {
+    min-width: 0;
+  }
+  .stat-title {
+    gap: 6px;
+  }
+  .stat-value {
+    overflow-wrap: anywhere;
+  }
+  .batch-actions > .primary,
+  .batch-actions > .secondary {
+    white-space: normal;
+  }
+  .batch-form input,
+  .batch-form textarea,
+  .batch-panel select,
+  .filter-wrap select,
+  .login-form input,
+  .serial-control input,
+  .search-wrap input {
+    font-size: 16px;
   }
 }

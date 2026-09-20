@@ -31,4 +31,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium webkit
+      - run: node --import tsx scripts/mobile-check.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-layout
+          path: .local/mobile-check/*.png
+          include-hidden-files: true
       - run: docker build --tag coverage-desk:ci .

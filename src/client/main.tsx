@@ -889,7 +889,7 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
                 </label>
               </div>
               <div className="table-scroll">
-                <table>
+                <table className="record-table" role="table" aria-label="Historia sprawdzeń">
                   <thead>
                     <tr>
                       <th>URZĄDZENIE / NUMER SERYJNY</th>
@@ -925,14 +925,14 @@ function Dashboard({ logout, demo }: { logout: () => void; demo: boolean }) {
                             <span className="stage-caption">{stageLabels[check.stage]}</span>
                           )}
                         </td>
-                        <td className="date-cell">
+                        <td className="date-cell" data-label="Data / czas / proxy">
                           {date(check.createdAt)}
                           <span className="stage-caption">
                             {duration(check.runs?.at(-1)?.durationMs)} ·{' '}
                             {check.runs?.at(-1)?.proxy ?? 'Brak pomiaru'}
                           </span>
                         </td>
-                        <td>
+                        <td className="record-action">
                           <button
                             className="row-action"
                             onClick={() => setSelected(check)}

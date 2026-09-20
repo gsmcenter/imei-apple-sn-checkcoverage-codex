@@ -355,7 +355,7 @@ export function BatchPanel({
             />
           </div>
           <div className="table-scroll">
-            <table>
+            <table className="record-table" role="table" aria-label="Paczki SN">
               <thead>
                 <tr>
                   <th>Nazwa / utworzono</th>
@@ -371,17 +371,17 @@ export function BatchPanel({
                       <strong>{b.name}</strong>
                       <span className="stage-caption">{date(b.createdAt)}</span>
                     </td>
-                    <td>
+                    <td data-label="Status i postęp">
                       <span>{batchStatus(b)}</span>
                       <Progress batch={b} />
                     </td>
-                    <td>
+                    <td data-label="Wyniki">
                       {b.completed} udanych · {b.failed} błędów
                       <span className="stage-caption">
                         {b.waiting} oczekujących · {b.queued + b.running} w kolejce / pracy
                       </span>
                     </td>
-                    <td>
+                    <td className="record-action">
                       <button
                         className="secondary"
                         onClick={() => open(b.id)}
@@ -562,7 +562,7 @@ export function BatchPanel({
               </select>
             </div>
             <div className="table-scroll">
-              <table>
+              <table className="record-table" role="table" aria-label="Pozycje paczki">
                 <thead>
                   <tr>
                     <th># / SN</th>
@@ -595,14 +595,14 @@ export function BatchPanel({
                             <span className="batch-error-caption">{i.check.errorMessage}</span>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Czas / integracje">
                           {duration(r?.durationMs)}
                           <span className="stage-caption">
                             {r ? `${r.proxy} · ${r.solver}` : '—'}
                           </span>
                           <span className="stage-caption">CAPTCHA: {duration(r?.captchaMs)}</span>
                         </td>
-                        <td>
+                        <td className="record-action">
                           {i.check && (
                             <button
                               className="text-button"
