@@ -33,6 +33,8 @@ Integracja używa natywnego proxy Chromium, nie konektora undici. Do Evomi nie w
 
 ## Limity i statystyki
 
+Przycisk **Resetuj statystyki** w Stanie systemu rozpoczyna nowy okres porównań proxy i solverów, średnich czasów oraz limitów Apple. Panel pokazuje datę początku okresu. Uwzględniane są tylko sprawdzenia zlecone po resecie; wcześniejsze zadania oczekujące lub trwające pozostają poza nowymi pomiarami także po zakończeniu. Historia, logi, wyniki, paczki i ich lokalne podsumowania pozostają dostępne. Reset nie odnawia salda ani dziennych limitów. Początek okresu jest zapisany w bazie i zachowuje się po wdrożeniu.
+
 Planszę „We'll be back / We're busy updating our support tools” traktujemy jako sygnał limitu (`APPLE_RATE_LIMITED`). To heurystyka integracji, nie dowód przyczyny komunikatu Apple. Wykrywamy ją przy otwieraniu strony, CAPTCHA, wysyłaniu i wynikach. Domyślnie trzy dodatkowe sesje po limicie (`RATE_LIMIT_RETRIES=3`), niezależnie od ponowień CAPTCHA. Wcześniejsze zapisane limity są uwzględniane po wznowieniu workera. Nadal obowiązuje łączny `CHECK_TIMEOUT_MS`. Nie ma trybu bez proxy. Limit przed wysyłką CAPTCHA nie uruchamia płatnego zadania.
 
 Tabela „Wydajność wg proxy” zawiera liczbę sprawdzeń, skuteczność, średnią i medianę czasu Apple, sesje, limity i błędy proxy. Czas Apple mierzymy od nawigacji do zakończenia sesji, odejmując oczekiwanie na solver. Obejmuje też formularz i oczekiwanie na DOM — nie jest czystym czasem sieciowym. Średnia/mediana dotyczą udanych sprawdzeń i sumują ich zmierzone sesje. Starsze wpisy bez pomiarów są pomijane.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Clock3, Wallet, RefreshCw } from 'lucide-react';
+import { Activity, Clock3, Wallet, RefreshCw, RotateCcw } from 'lucide-react';
 import { api, post } from './api';
 import {
   duration,
@@ -20,6 +20,26 @@ export function SystemPanel() {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
+  async function resetStatistics() {
+    setResetting(true);
+    setError('');
+    setResetMessage('');
+    try {
+      await post('/api/v1/system/statistics/reset', {});
+      setResetConfirm(false);
+      setRevision((r) => r + 1);
+      setResetMessage(
+        'Rozpoczęto nowy okres pomiarowy. Statystyki obejmują wyłącznie sprawdzenia zlecone od teraz.',
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setResetting(false);
+    }
+  }
   const [probing, setProbing] = useState(false),
     [probes, setProbes] = useState<ProxyTest[]>([]);
   async function probe() {
@@ -106,12 +126,60 @@ export function SystemPanel() {
         </div>
       )}
       <div className="system-toolbar">
-        <span>Statystyki od włączenia pomiarów · odświeżanie co 10 s</span>
-        <button className="secondary" onClick={() => setRevision((r) => r + 1)}>
-          <RefreshCw size={16} />
-          Odśwież
-        </button>
+        <span>
+          {data?.statisticsSince
+            ? `Statystyki od ${new Date(data.statisticsSince).toLocaleString('pl-PL')}`
+            : 'Statystyki od włączenia pomiarów'}{' '}
+          · odświeżanie co 10 s
+        </span>
+        <div className="statistics-actions">
+          <button className="secondary" onClick={() => setRevision((r) => r + 1)}>
+            <RefreshCw size={16} />
+            Odśwież
+          </button>
+          <button
+            className="secondary"
+            disabled={!data || resetting}
+            onClick={() => {
+              setResetConfirm(true);
+              setResetMessage('');
+            }}
+          >
+            <RotateCcw size={16} /> Resetuj statystyki
+          </button>
+        </div>
       </div>
+      {resetConfirm && (
+        <section className="system-card" aria-label="Reset statystyk">
+          <h2>Rozpocząć nowy okres pomiarowy?</h2>
+          <p>
+            Wyzerujemy porównania proxy i solverów, średnie czasy oraz statystyki limitów Apple.
+            Będą liczyć się tylko sprawdzenia zlecone po resecie — także zadania będące teraz w
+            kolejce lub w toku nie trafią do nowych pomiarów.
+          </p>
+          <p>
+            Historia sprawdzeń, paczki i logi pozostaną dostępne. Reset nie odnawia salda ani
+            dziennych limitów użycia.
+          </p>
+          <div className="statistics-actions">
+            <button
+              className="secondary"
+              disabled={resetting}
+              onClick={() => setResetConfirm(false)}
+            >
+              Anuluj
+            </button>
+            <button className="primary" disabled={resetting} onClick={() => void resetStatistics()}>
+              {resetting ? 'Resetowanie…' : 'Rozpocznij nowy okres'}
+            </button>
+          </div>
+        </section>
+      )}
+      {resetMessage && (
+        <div className="notice" role="status">
+          {resetMessage}
+        </div>
+      )}
       <div className="stats-grid">
         <article className="stat-card">
           <div className="stat-title">

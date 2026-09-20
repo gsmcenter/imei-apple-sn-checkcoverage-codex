@@ -468,41 +468,70 @@ export class Repository {
       [id, token, measurement, durationMs, outcome],
     );
   }
+  async resetStatistics(): Promise<{ statisticsSince: string }> {
+    await this.settings();
+    const row = (
+      await this.db.query<{ since: Date | string }>(
+        "UPDATE system_settings SET statistics_since=date_trunc('milliseconds',clock_timestamp()) WHERE id=1 RETURNING statistics_since AS since",
+      )
+    ).rows[0];
+    return { statisticsSince: iso(row.since) };
+  }
   async system(demo = false): Promise<SystemStatus> {
-    const proxyStats = await proxyStatistics(this.db);
+    const settings = await this.settings();
+    const row = (
+      await this.db.query<{ since: Date | string | null }>(
+        'SELECT statistics_since AS since FROM system_settings WHERE id=1',
+      )
+    ).rows[0];
+    const statisticsSince = row.since ? iso(row.since) : null;
+    // Use the same boundary for every metric, including work still running when reset occurs.
+    const window = [statisticsSince];
+    const checkWindow = '($1::timestamptz IS NULL OR checks.created_at >= $1::timestamptz)';
+    const proxyStats = await proxyStatistics(this.db, statisticsSince);
     const aggregate = (
       await this.db.query<{
         samples: string;
         average: string | null;
         queue: string | null;
-      }>(`SELECT count(*) AS samples,
+      }>(
+        `SELECT count(*) AS samples,
       avg((r->>'durationMs')::double precision) AS average,avg((r->>'queueMs')::double precision) AS queue
-      FROM checks CROSS JOIN LATERAL jsonb_array_elements(runs) r WHERE r->>'status'='completed'`)
+      FROM checks CROSS JOIN LATERAL jsonb_array_elements(runs) r WHERE r->>'status'='completed' AND ${checkWindow}`,
+        window,
+      )
     ).rows[0];
     const rows = (
-      await this.db.query<
-        Record<string, string | null>
-      >(`SELECT r->>'proxy' AS name,count(*) AS total,
+      await this.db.query<Record<string, string | null>>(
+        `SELECT r->>'proxy' AS name,count(*) AS total,
       count(*) FILTER(WHERE r->>'status'='completed') AS completed,
       count(*) FILTER(WHERE r->>'status'='failed') AS failed,count(*) FILTER(WHERE r->>'status'='interrupted') AS interrupted,
       avg((r->>'durationMs')::double precision) FILTER(WHERE r->>'status'='completed') AS average,
       avg((r->>'captchaMs')::double precision) FILTER(WHERE r->>'status'='completed') AS captcha
-      FROM checks CROSS JOIN LATERAL jsonb_array_elements(runs) r GROUP BY r->>'proxy'`)
+      FROM checks CROSS JOIN LATERAL jsonb_array_elements(runs) r WHERE ${checkWindow} GROUP BY r->>'proxy'`,
+        window,
+      )
     ).rows;
     const solvers = (
-      await this.db.query<Record<string, string | null>>(`SELECT solver AS name,count(*) AS total,
+      await this.db.query<Record<string, string | null>>(
+        `SELECT solver AS name,count(*) AS total,
       count(*) FILTER(WHERE outcome='completed') AS completed,
       count(*) FILTER(WHERE outcome IN ('failed','rejected')) AS failed,count(*) FILTER(WHERE outcome='interrupted') AS interrupted,
-      avg(duration_ms) FILTER(WHERE outcome='completed') AS average FROM captcha_measurements GROUP BY solver`)
+      avg(duration_ms) FILTER(WHERE outcome='completed') AS average FROM captcha_measurements JOIN checks ON checks.id=captcha_measurements.check_id WHERE ${checkWindow} GROUP BY solver`,
+        window,
+      )
     ).rows;
     const checkSolvers = (
       await this.db.query<{
         name: string;
         average: string | null;
         samples: string;
-      }>(`SELECT r->>'solver' AS name,
+      }>(
+        `SELECT r->>'solver' AS name,
       avg((r->>'durationMs')::double precision) FILTER(WHERE r->>'status'='completed') AS average,
-      count(*) FILTER(WHERE r->>'status'='completed') AS samples FROM checks CROSS JOIN LATERAL jsonb_array_elements(runs) r GROUP BY r->>'solver'`)
+      count(*) FILTER(WHERE r->>'status'='completed') AS samples FROM checks CROSS JOIN LATERAL jsonb_array_elements(runs) r WHERE ${checkWindow} GROUP BY r->>'solver'`,
+        window,
+      )
     ).rows;
     const map = (r: Record<string, string | null>): Metric => ({
       name: r.name!,
@@ -525,8 +554,9 @@ export class Repository {
     ).rows[0];
     return {
       ...proxyStats,
+      statisticsSince,
       proxyOptions: proxyChoices(this.config, demo),
-      settings: await this.settings(),
+      settings,
       proxies: rows.map(map),
       solvers: solverIds.map((name) => {
         const r = solvers.find((row) => row.name === name);

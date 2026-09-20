@@ -172,6 +172,12 @@ export async function createApp(
     !!options.demo,
   );
   app.get('/api/v1/system', async () => repo.system(!!options.demo));
+  app.post('/api/v1/system/statistics/reset', async (req) => {
+    z.object({})
+      .strict()
+      .parse(req.body ?? {});
+    return repo.resetStatistics();
+  });
   app.get('/api/v1/system/balance', async () => balance());
   app.post('/api/v1/system/settings', async (req) => {
     const settings = z

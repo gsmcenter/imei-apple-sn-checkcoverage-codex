@@ -1472,6 +1472,12 @@ tbody tr:hover {
   color: #76859d;
   font-size: 13px;
 }
+.statistics-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
 .system-card {
   background: #fff;
   border: 1px solid #e3e9f2;
@@ -1629,9 +1635,10 @@ tbody tr:hover {
   }
   .system-toolbar {
     align-items: flex-start;
+    flex-direction: column;
   }
   .system-toolbar > span {
-    max-width: 60%;
+    max-width: 100%;
   }
 }
 .batch-panel {

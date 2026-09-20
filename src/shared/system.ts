@@ -49,6 +49,7 @@ export interface Metric {
   checkSamples?: number;
 }
 export interface SystemStatus {
+  statisticsSince: string | null;
   proxyOptions: { label: string; provider: string }[];
   proxyPerformance: ProxyPerformance[];
   limits: LimitMetric[];

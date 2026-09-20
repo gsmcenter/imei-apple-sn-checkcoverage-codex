@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
  id INTEGER PRIMARY KEY CHECK(id=1), proxy_mode TEXT NOT NULL,
  solver_id TEXT NOT NULL DEFAULT '2captcha', updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS statistics_since TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS captcha_measurements (
  id UUID PRIMARY KEY, check_id UUID NOT NULL REFERENCES checks(id), token UUID NOT NULL,
  solver TEXT NOT NULL, started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),

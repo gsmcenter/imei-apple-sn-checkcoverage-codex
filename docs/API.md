@@ -55,6 +55,8 @@ Wszystkie endpointy wymagają sesji; POST także poprawnego `Origin`. Utworzenie
 
 ## System i diagnostyka
 
+- `POST /api/v1/system/statistics/reset`: puste `{}`, wymaga sesji i Origin. Ustawia początek nowego okresu pomiarowego według zegara bazy; zwraca `{ statisticsSince }` w ISO UTC. Nie usuwa historii, logów, paczek ani limitów użycia. Statystyki obejmują wyłącznie sprawdzenia **zlecone** od tej chwili, zatem starsze zadania zakończone po resecie nie wpływają na nowy okres. `GET /api/v1/system` zwraca `statisticsSince` (`null` przed pierwszym resetem). Okres jest wspólny dla paneli i zachowuje się po restarcie/wdrożeniu.
+
 - `GET /api/v1/system`: ustawienia proxy/solvera, statystyki prób wg proxy i wywołań wg solvera, kolejka, aktywne workery, limity i parametry procesu WWW.
 - `GET /api/v1/system/balance`: `{ balance, currency: "USD", status, checkedAt }`. `status` to `ok`, `unavailable`, `not_configured` lub `demo`; brak odczytu daje `balance: null`. Cache do 60 s na proces.
 - `POST /api/v1/system/settings`: `{ "proxyMode": "random", "solverId": "2captcha" }`. `proxyMode` dopuszcza etykiety z `proxyOptions` zwracanych przez `/api/v1/system`; `random` wymaga co najmniej dwóch wpisów. `solverId` dopuszcza `2captcha` i `captchaai`; inne wartości zwracają 400. Wybór solvera bez klucza API daje 503. Wymagana sesja i prawidłowy Origin.
