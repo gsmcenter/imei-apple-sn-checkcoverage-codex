@@ -4,6 +4,8 @@ export const proxyHosts = [
   'open.proxymesh.com:31280',
 ] as const;
 export const proxyModes = [...proxyHosts, 'random'] as const;
+export const MIN_CONCURRENCY = 1;
+export const MAX_CONCURRENCY = 8;
 export type ProxyMode = string;
 export const solverIds = ['2captcha', 'captchaai'] as const;
 export type SolverId = (typeof solverIds)[number];

@@ -33,6 +33,8 @@ Integracja używa natywnego proxy Chromium, nie konektora undici. Do Evomi nie w
 
 ## Limity i statystyki
 
+Sekcja **Równoległe sprawdzenia** pozwala ustawić globalny limit 1–8 zadań. Ustawienie zapisuje się w bazie i działa bez restartu także dla paczek oraz wielu workerów. Po zmniejszeniu limitu trwające zadania dokończą pracę; nowe poczekają na wolne miejsca. Odstęp między startami i limity dzienne nadal obowiązują. `WORKER_CONCURRENCY` wyznacza wartość początkową, dopóki nie zapiszesz limitu w panelu. Reset statystyk i zmiana proxy/solvera nie zmieniają limitu równoległości.
+
 Przycisk **Resetuj statystyki** w Stanie systemu rozpoczyna nowy okres porównań proxy i solverów, średnich czasów oraz limitów Apple. Panel pokazuje datę początku okresu. Uwzględniane są tylko sprawdzenia zlecone po resecie; wcześniejsze zadania oczekujące lub trwające pozostają poza nowymi pomiarami także po zakończeniu. Historia, logi, wyniki, paczki i ich lokalne podsumowania pozostają dostępne. Reset nie odnawia salda ani dziennych limitów. Początek okresu jest zapisany w bazie i zachowuje się po wdrożeniu.
 
 Planszę „We'll be back / We're busy updating our support tools” traktujemy jako sygnał limitu (`APPLE_RATE_LIMITED`). To heurystyka integracji, nie dowód przyczyny komunikatu Apple. Wykrywamy ją przy otwieraniu strony, CAPTCHA, wysyłaniu i wynikach. Domyślnie trzy dodatkowe sesje po limicie (`RATE_LIMIT_RETRIES=3`), niezależnie od ponowień CAPTCHA. Wcześniejsze zapisane limity są uwzględniane po wznowieniu workera. Nadal obowiązuje łączny `CHECK_TIMEOUT_MS`. Nie ma trybu bez proxy. Limit przed wysyłką CAPTCHA nie uruchamia płatnego zadania.

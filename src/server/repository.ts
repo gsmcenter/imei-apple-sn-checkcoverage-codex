@@ -1,6 +1,8 @@
 import type { SolverId } from '../shared/system.js';
 import { randomUUID, randomInt } from 'node:crypto';
 import {
+  MIN_CONCURRENCY,
+  MAX_CONCURRENCY,
   solverIds,
   type SystemSettings,
   type Run,
@@ -244,12 +246,13 @@ export class Repository {
   } | null> {
     return this.db.transaction(async (sql) => {
       await sql.query('SELECT pg_advisory_xact_lock(710433)');
+      const concurrency = await this.concurrency(sql);
       const active = (
         await sql.query<{ count: string }>(
           "SELECT count(*) FROM checks WHERE status='running' AND lease_until>now()",
         )
       ).rows[0];
-      if (Number(active.count) >= this.config.WORKER_CONCURRENCY) return null;
+      if (Number(active.count) >= concurrency) return null;
       const quota = await sql.query(
         "SELECT day FROM captcha_usage WHERE day=(now() AT TIME ZONE 'UTC')::date AND count >= $1",
         [this.config.MAX_CAPTCHAS_PER_DAY],
@@ -377,6 +380,34 @@ export class Repository {
       );
       return true;
     });
+  }
+  async concurrency(sql: Sql = this.db): Promise<number> {
+    const row = (
+      await sql.query<{ worker_concurrency: number | null }>(
+        'SELECT worker_concurrency FROM system_settings WHERE id=1',
+      )
+    ).rows[0];
+    return row?.worker_concurrency ?? this.config.WORKER_CONCURRENCY;
+  }
+  async saveConcurrency(concurrency: number): Promise<{ concurrency: number }> {
+    if (
+      !Number.isInteger(concurrency) ||
+      concurrency < MIN_CONCURRENCY ||
+      concurrency > MAX_CONCURRENCY
+    )
+      throw Object.assign(new Error('Niepoprawny limit równoległych sprawdzeń.'), {
+        statusCode: 400,
+      });
+    await this.settings();
+    await this.db.transaction(async (sql) => {
+      // Serialize changes with claims so a claim cannot use a superseded limit after saving.
+      await sql.query('SELECT pg_advisory_xact_lock(710433)');
+      await sql.query(
+        'UPDATE system_settings SET worker_concurrency=$1,updated_at=now() WHERE id=1',
+        [concurrency],
+      );
+    });
+    return { concurrency };
   }
   async settings(sql: Sql = this.db): Promise<SystemSettings> {
     const configured = this.config.PROXY_SERVER ? new URL(this.config.PROXY_SERVER).host : '';
@@ -583,7 +614,7 @@ export class Repository {
       activeWorkers: Number(workers.count),
       queued: Number(counts.queued),
       running: Number(counts.running),
-      concurrency: this.config.WORKER_CONCURRENCY,
+      concurrency: await this.concurrency(),
       intervalMs: this.config.MIN_CHECK_INTERVAL_MS,
       timeoutMs: this.config.CHECK_TIMEOUT_MS,
       uptimeSeconds: Math.floor(process.uptime()),

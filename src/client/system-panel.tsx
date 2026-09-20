@@ -3,6 +3,8 @@ import { Activity, Clock3, Wallet, RefreshCw, RotateCcw } from 'lucide-react';
 import { api, post } from './api';
 import {
   duration,
+  MIN_CONCURRENCY,
+  MAX_CONCURRENCY,
   solverIds,
   solverLabels,
   type SystemStatus,
@@ -20,6 +22,29 @@ export function SystemPanel() {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [concurrency, setConcurrency] = useState<number | null>(null);
+  const [savingConcurrency, setSavingConcurrency] = useState(false);
+  const [concurrencyMessage, setConcurrencyMessage] = useState('');
+  async function saveConcurrency() {
+    if (concurrency === null) return;
+    setSavingConcurrency(true);
+    setError('');
+    setConcurrencyMessage('');
+    try {
+      const saved = await post<{ concurrency: number }>('/api/v1/system/concurrency', {
+        concurrency,
+      });
+      setData((d) => (d ? { ...d, concurrency: saved.concurrency } : d));
+      setConcurrencyMessage(
+        `Zapisano limit: ${saved.concurrency}. Trwające sprawdzenia dokończą pracę.`,
+      );
+      setRevision((r) => r + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingConcurrency(false);
+    }
+  }
   const [resetConfirm, setResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetMessage, setResetMessage] = useState('');
@@ -61,6 +86,7 @@ export function SystemPanel() {
         const value = await api<SystemStatus>('/api/v1/system');
         if (alive) {
           setData(value);
+          setConcurrency((c) => c ?? value.concurrency);
           setSettings((s) =>
             s
               ? {
@@ -309,6 +335,57 @@ export function SystemPanel() {
             )}
           </form>
         )}
+      </section>
+      <section className="system-card">
+        <h2>Równoległe sprawdzenia</h2>
+        <p>
+          Wspólny limit dla całej aplikacji, pojedynczych SN i paczek. Zmiana działa bez restartu.
+          Po zmniejszeniu limitu nowe zadania poczekają na zwolnienie miejsc; trwające sprawdzenia
+          dokończą pracę.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveConcurrency();
+          }}
+        >
+          <div className="system-settings">
+            <label>
+              Liczba równoległych sprawdzeń
+              <select
+                value={concurrency ?? ''}
+                disabled={concurrency === null || savingConcurrency}
+                onChange={(e) => {
+                  setConcurrency(Number(e.target.value));
+                  setConcurrencyMessage('');
+                }}
+              >
+                {concurrency === null && <option value="">Wczytywanie…</option>}
+                {Array.from(
+                  { length: MAX_CONCURRENCY - MIN_CONCURRENCY + 1 },
+                  (_, i) => i + MIN_CONCURRENCY,
+                ).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p>
+            Aktywny limit: <strong>{data?.concurrency ?? '—'}</strong> · W toku:{' '}
+            {data?.running ?? '—'} · W kolejce: {data?.queued ?? '—'}. Odstęp między startami i
+            limity dzienne nadal obowiązują.
+          </p>
+          <button className="primary" disabled={savingConcurrency || concurrency === null}>
+            {savingConcurrency ? 'Zapisywanie…' : 'Zapisz limit równoległości'}
+          </button>
+          {concurrencyMessage && (
+            <p className="system-saved" role="status">
+              {concurrencyMessage}
+            </p>
+          )}
+        </form>
       </section>
       <section className="system-card">
         <h2>Diagnostyka proxy</h2>

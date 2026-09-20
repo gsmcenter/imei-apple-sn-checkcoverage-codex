@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
  solver_id TEXT NOT NULL DEFAULT '2captcha', updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS statistics_since TIMESTAMPTZ;
+ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS worker_concurrency INTEGER CHECK(worker_concurrency BETWEEN 1 AND 8);
 CREATE TABLE IF NOT EXISTS captcha_measurements (
  id UUID PRIMARY KEY, check_id UUID NOT NULL REFERENCES checks(id), token UUID NOT NULL,
  solver TEXT NOT NULL, started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),

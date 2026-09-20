@@ -55,6 +55,8 @@ Wszystkie endpointy wymagają sesji; POST także poprawnego `Origin`. Utworzenie
 
 ## System i diagnostyka
 
+- `POST /api/v1/system/concurrency`: `{ "concurrency": 3 }`, liczba całkowita 1–8, wymagane sesja i Origin. Zwraca `{ concurrency }`. Zapisuje globalny limit dla wszystkich workerów; działa bez restartu. Zmniejszenie nie przerywa aktywnych zadań — kolejne wystartują po zwolnieniu miejsc. Pole `concurrency` w odpowiedzi `GET /api/v1/system` pokazuje zapisany limit. Do pierwszego zapisu obowiązuje `WORKER_CONCURRENCY`.
+
 - `POST /api/v1/system/statistics/reset`: puste `{}`, wymaga sesji i Origin. Ustawia początek nowego okresu pomiarowego według zegara bazy; zwraca `{ statisticsSince }` w ISO UTC. Nie usuwa historii, logów, paczek ani limitów użycia. Statystyki obejmują wyłącznie sprawdzenia **zlecone** od tej chwili, zatem starsze zadania zakończone po resecie nie wpływają na nowy okres. `GET /api/v1/system` zwraca `statisticsSince` (`null` przed pierwszym resetem). Okres jest wspólny dla paneli i zachowuje się po restarcie/wdrożeniu.
 
 - `GET /api/v1/system`: ustawienia proxy/solvera, statystyki prób wg proxy i wywołań wg solvera, kolejka, aktywne workery, limity i parametry procesu WWW.

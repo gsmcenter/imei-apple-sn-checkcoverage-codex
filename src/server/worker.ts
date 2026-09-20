@@ -102,7 +102,7 @@ export function startWorker(repo: Repository, provider: CoverageProvider, demo =
           await repo.cleanupEphemeral();
           lastHousekeeping = Date.now();
         }
-        if (active.size < repo.config.WORKER_CONCURRENCY) {
+        if (active.size < (await repo.concurrency())) {
           const configured =
             demo ||
             (integrationsConfigured(repo.config) &&

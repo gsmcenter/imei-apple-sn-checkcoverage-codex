@@ -10,7 +10,7 @@ import { integrationsConfigured, solverConfigured } from './config.js';
 import { Repository } from './repository.js';
 import { AppError, normalizeSerial } from './errors.js';
 import { newToken, privateKey, verifyPassword } from './security.js';
-import { solverIds } from '../shared/system.js';
+import { solverIds, MIN_CONCURRENCY, MAX_CONCURRENCY } from '../shared/system.js';
 import { CaptchaClient } from './integrations/captcha.js';
 import { cachedBalance } from './balance.js';
 import { BatchRepository, batchCsv } from './batches.js';
@@ -172,6 +172,13 @@ export async function createApp(
     !!options.demo,
   );
   app.get('/api/v1/system', async () => repo.system(!!options.demo));
+  app.post('/api/v1/system/concurrency', async (req) => {
+    const { concurrency } = z
+      .object({ concurrency: z.number().int().min(MIN_CONCURRENCY).max(MAX_CONCURRENCY) })
+      .strict()
+      .parse(req.body);
+    return repo.saveConcurrency(concurrency);
+  });
   app.post('/api/v1/system/statistics/reset', async (req) => {
     z.object({})
       .strict()
