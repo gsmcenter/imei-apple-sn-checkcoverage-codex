@@ -12,7 +12,8 @@ import { AppError, normalizeSerial } from './errors.js';
 import { newToken, privateKey, verifyPassword } from './security.js';
 import { solverIds, MIN_CONCURRENCY, MAX_CONCURRENCY } from '../shared/system.js';
 import { CaptchaClient } from './integrations/captcha.js';
-import { cachedBalance } from './balance.js';
+import { cachedBalance, cachedCaptchaAiAccount } from './balance.js';
+import { CaptchaAiClient } from './integrations/captchaai.js';
 import { BatchRepository, batchCsv } from './batches.js';
 import { MAX_IMPORT_BYTES } from '../shared/batches.js';
 import { proxyCatalog } from './proxies.js';
@@ -27,6 +28,7 @@ export async function createApp(
     logger?: boolean;
     workerHealthy?: () => boolean;
     readBalance?: () => Promise<number>;
+    readCaptchaAiAccount?: () => Promise<{ total: number; busy: number }>;
   } = {},
 ) {
   const app = Fastify({
@@ -186,6 +188,15 @@ export async function createApp(
     return repo.resetStatistics();
   });
   app.get('/api/v1/system/balance', async () => balance());
+  const captchaAiAccount = cachedCaptchaAiAccount(
+    options.readCaptchaAiAccount ??
+      (config.CAPTCHAAI_API_KEY
+        ? () =>
+            new CaptchaAiClient(config.CAPTCHAAI_API_KEY!, config.CAPTCHA_TIMEOUT_MS).getAccount()
+        : undefined),
+    !!options.demo,
+  );
+  app.get('/api/v1/system/captchaai-account', async () => captchaAiAccount());
   app.post('/api/v1/system/settings', async (req) => {
     const settings = z
       .object({

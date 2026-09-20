@@ -20,6 +20,14 @@ export const errors = {
   CAPTCHA_SERVICE:
     'Solver CAPTCHA odrzucił zadanie lub jest niedostępny. Sprawdź dziennik, klucz API i stan konta.',
   CAPTCHA_TIMEOUT: 'Upłynął czas oczekiwania na rozwiązanie CAPTCHA.',
+  CAPTCHAAI_BUSY:
+    'CaptchaAI nie przyjęło zadania przed upływem czasu oczekiwania na wątek. Sprawdź zajętość i aktywność abonamentu w Stanie systemu. ERROR_ZERO_BALANCE nie jest tu saldem USD.',
+  CAPTCHAAI_KEY: 'CaptchaAI odrzuciło klucz API. Sprawdź CAPTCHAAI_API_KEY w konfiguracji serwera.',
+  CAPTCHAAI_IP: 'CaptchaAI odrzuciło adres IP serwera. Sprawdź listę dozwolonych IP w CaptchaAI.',
+  CAPTCHAAI_NETWORK:
+    'Nie udało się połączyć z API CaptchaAI lub serwer zwrócił błąd HTTP. Szczegóły w dzienniku sprawdzenia.',
+  CAPTCHAAI_RESPONSE:
+    'CaptchaAI zwróciło nieprawidłową odpowiedź lub odrzuciło zadanie. Kod odpowiedzi znajduje się w dzienniku sprawdzenia.',
   PROXY_ERROR: 'Nie udało się połączyć przez ProxyMesh. Sprawdź serwer i dane dostępowe.',
   CHECK_TIMEOUT: 'Sprawdzenie przekroczyło limit czasu. Możesz uruchomić nowe sprawdzenie.',
   DAILY_LIMIT:

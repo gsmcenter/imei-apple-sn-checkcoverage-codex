@@ -12,7 +12,11 @@ const origin = 'http://localhost:3000';
 before(async () => {
   ctx = await setup();
   repo = new Repository(ctx.db, ctx.config);
-  app = await createApp(ctx.config, repo, { logger: false, readBalance: async () => 12.34 });
+  app = await createApp(ctx.config, repo, {
+    logger: false,
+    readBalance: async () => 12.34,
+    readCaptchaAiAccount: async () => ({ total: 5, busy: 2 }),
+  });
 });
 after(async () => {
   await app?.close();
@@ -124,12 +128,24 @@ test('login attempts are rate limited in the database', async () => {
 });
 
 test('system settings and balance are private; only supported integrations and same-origin writes are allowed', async () => {
-  for (const url of ['/api/v1/system', '/api/v1/system/balance'])
+  for (const url of [
+    '/api/v1/system',
+    '/api/v1/system/balance',
+    '/api/v1/system/captchaai-account',
+  ])
     assert.equal((await app.inject(url)).statusCode, 401);
   const cookies = { coverage_session: session };
   assert.equal((await app.inject({ url: '/api/v1/system', cookies })).statusCode, 200);
   const balance = await app.inject({ url: '/api/v1/system/balance', cookies });
   assert.equal(balance.json().balance, 12.34);
+  const account = await app.inject({ url: '/api/v1/system/captchaai-account', cookies });
+  assert.equal(account.statusCode, 200);
+  assert.equal(account.json().kind, 'threads');
+  assert.equal(account.json().total, 5);
+  assert.equal(account.json().busy, 2);
+  assert.equal(account.json().available, 3);
+  assert.ok(!('balance' in account.json()));
+  assert.ok(!('apiKey' in account.json()));
   for (const payload of [
     { proxyMode: 'http://attacker.invalid', solverId: '2captcha' },
     { proxyMode: 'random', solverId: 'unknown' },

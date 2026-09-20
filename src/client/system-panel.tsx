@@ -10,6 +10,7 @@ import {
   type SystemStatus,
   type SystemSettings,
   type SolverBalance,
+  type CaptchaAiAccount,
   type Metric,
   type ProxyTest,
 } from '../shared/system';
@@ -17,6 +18,7 @@ import {
 export function SystemPanel() {
   const [data, setData] = useState<SystemStatus | null>(null);
   const [balance, setBalance] = useState<SolverBalance | null>(null);
+  const [captchaAiAccount, setCaptchaAiAccount] = useState<CaptchaAiAccount | null>(null);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -82,6 +84,22 @@ export function SystemPanel() {
   useEffect(() => {
     let alive = true;
     const refresh = async () => {
+      void api<CaptchaAiAccount>('/api/v1/system/captchaai-account')
+        .then((value) => {
+          if (alive) setCaptchaAiAccount(value);
+        })
+        .catch(() => {
+          if (alive)
+            setCaptchaAiAccount({
+              kind: 'threads',
+              total: null,
+              busy: null,
+              available: null,
+              status: 'unavailable',
+              message: 'Nie udało się odczytać stanu abonamentu CaptchaAI.',
+              checkedAt: new Date().toISOString(),
+            });
+        });
       try {
         const value = await api<SystemStatus>('/api/v1/system');
         if (alive) {
@@ -255,6 +273,50 @@ export function SystemPanel() {
           </small>
         </article>
       </div>
+      <section className="system-card">
+        <h2>Abonament CaptchaAI</h2>
+        <p>
+          CaptchaAI rozlicza abonament według liczby równoległych wątków. Saldo 2Captcha powyżej
+          dotyczy osobnego dostawcy.
+        </p>
+        {captchaAiAccount?.status === 'ok' ? (
+          <>
+            <dl className="system-facts">
+              <div>
+                <dt>Wątki abonamentu</dt>
+                <dd>{captchaAiAccount.total}</dd>
+              </div>
+              <div>
+                <dt>Zajęte / wolne</dt>
+                <dd>
+                  {captchaAiAccount.busy} / {captchaAiAccount.available}
+                </dd>
+              </div>
+            </dl>
+            <p>
+              {captchaAiAccount.total === 0
+                ? 'API nie zgłasza aktywnych wątków. Sprawdź abonament w CaptchaAI.'
+                : captchaAiAccount.available === 0
+                  ? 'Wszystkie wątki są zajęte. Zadanie poczeka na dostępność w ramach limitu czasu.'
+                  : 'Dostępne są wolne wątki.'}
+            </p>
+            <small>
+              Odczyt: {new Date(captchaAiAccount.checkedAt).toLocaleTimeString('pl-PL')}. Stan
+              odświeżany najwyżej raz na minutę; obejmuje także inne skrypty używające konta.
+            </small>
+          </>
+        ) : (
+          <p>
+            {!captchaAiAccount
+              ? 'Pobieranie stanu abonamentu…'
+              : captchaAiAccount.status === 'not_configured'
+                ? 'Brak CAPTCHAAI_API_KEY na serwerze.'
+                : captchaAiAccount.status === 'demo'
+                  ? 'Tryb demonstracyjny — bez odpytywania konta.'
+                  : captchaAiAccount.message}
+          </p>
+        )}
+      </section>
       <section className="system-card">
         <h2>Integracje</h2>
         <p>

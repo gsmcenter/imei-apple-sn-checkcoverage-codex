@@ -125,5 +125,14 @@ export interface SolverBalance {
   status: 'ok' | 'unavailable' | 'not_configured' | 'demo';
   checkedAt: string;
 }
+export interface CaptchaAiAccount {
+  kind: 'threads';
+  total: number | null;
+  busy: number | null;
+  available: number | null;
+  status: 'ok' | 'unavailable' | 'not_configured' | 'demo';
+  message: string | null;
+  checkedAt: string;
+}
 export const duration = (ms: number | null | undefined) =>
   ms == null ? '—' : `${(ms / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} s`;
